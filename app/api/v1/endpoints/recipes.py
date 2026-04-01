@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from typing import Annotated, List, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,16 +25,16 @@ async def create_new_recipe(
     return schemas.Recipe.model_validate(db_recipe)
 
 
-@router.get("/", response_model=List[schemas.Recipe], operation_id="read_recipes")
+@router.get("/", response_model=list[schemas.Recipe], operation_id="read_recipes")
 async def read_recipes(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
-    skip: int = Query(0, qe=0),
+    skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    include_ingredients: Optional[str] = Query(
+    include_ingredients: str | None = Query(
         None, description="Comma-separated ingredient to include", max_length=500
     ),
-    exclude_ingredients: Optional[str] = Query(
+    exclude_ingredients: str | None = Query(
         None, description="Comma-separated ingredient to exclude", max_length=500
     ),
 ) -> list[schemas.Recipe]:
@@ -70,7 +70,7 @@ async def update_existing_recipe(
     recipe_id: int,
     recipe_in: schemas.RecipeUpdate,
 ) -> schemas.Recipe:
-    db_recipe: Optional[models.Recipe] = await recipe_service.get_recipe_by_id(
+    db_recipe: models.Recipe | None = await recipe_service.get_recipe_by_id(
         db=db, recipe_id=recipe_id
     )
     if not db_recipe:
@@ -96,7 +96,7 @@ async def delete_existing_recipe(
 
 
 @router.get(
-    "/search/", response_model=List[schemas.Recipe], operation_id="search_recipes"
+    "/search/", response_model=list[schemas.Recipe], operation_id="search_recipes"
 )
 async def search_recipes(
     *,
@@ -104,10 +104,10 @@ async def search_recipes(
     q: str = Query(
         ..., description="Search query for recipes using vector search", max_length=200
     ),
-    include_ingredients: Optional[str] = Query(
+    include_ingredients: str | None = Query(
         None, description="Comma-separated ingredient to include", max_length=500
     ),
-    exclude_ingredients: Optional[str] = Query(
+    exclude_ingredients: str | None = Query(
         None, description="Comma-separated ingredient to exclude", max_length=500
     ),
 ) -> list[schemas.Recipe]:
@@ -129,7 +129,7 @@ async def upload_recipe_images(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     recipe_id: int,
-    files: Annotated[List[UploadFile], File(...)],
+    files: Annotated[list[UploadFile], File(...)],
 ) -> schemas.Recipe:
     recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
     if not recipe:
@@ -137,7 +137,7 @@ async def upload_recipe_images(
 
     if len(files) > 5:
         raise HTTPException(
-            status_code=400, detail="Too many files sended. Max 5 allowed."
+            status_code=400, detail="Too many files sent. Max 5 allowed."
         )
 
     async def process_file(file: UploadFile) -> str:

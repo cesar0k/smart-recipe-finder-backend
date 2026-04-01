@@ -1,4 +1,4 @@
-from typing import Annotated, List
+from typing import Annotated
 
 from pydantic import Field, StringConstraints
 
@@ -13,4 +13,4 @@ class RecipeCreate(RecipeBase):
     ingredients: list[Annotated[str, StringConstraints(max_length=255)]] = Field(
         default_factory=list, max_length=100
     )
-    image_urls: List[str] = []
+    image_urls: list[str] = []
