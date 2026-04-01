@@ -1,8 +1,8 @@
 import re
-from typing import Any, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 from typing import cast as t_cast
 
-import inflect
 from sqlalchemy import String, not_, or_
 from sqlalchemy import cast as sa_cast
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +14,6 @@ from app.core.text_utils import get_word_forms
 from app.core.vector_store import vector_store
 from app.models import Recipe
 from app.schemas import RecipeCreate, RecipeUpdate
-
-p = inflect.engine()
 
 __all__ = [
     "create_recipe",
@@ -64,10 +62,10 @@ def _create_semantic_document(recipe: Recipe) -> tuple[str, dict[str, Any]]:
 
 
 def _apply_ingredient_filter(
-    query: Select[Tuple[Recipe]],
-    include_str: Optional[str] = None,
-    exclude_str: Optional[str] = None,
-) -> Select[Tuple[Recipe]]:
+    query: Select[tuple[Recipe]],
+    include_str: str | None = None,
+    exclude_str: str | None = None,
+) -> Select[tuple[Recipe]]:
     """
     Apply include/exclude filters to sqlalchemy object
     """
@@ -130,8 +128,8 @@ async def get_all_recipes(
     *,
     skip: int = 0,
     limit: int = 100,
-    include_str: Optional[str] = None,
-    exclude_str: Optional[str] = None,
+    include_str: str | None = None,
+    exclude_str: str | None = None,
 ) -> Sequence[Recipe]:
     query = select(Recipe)
 
@@ -143,7 +141,7 @@ async def get_all_recipes(
     return result.scalars().all()
 
 
-async def get_recipe_by_id(db: AsyncSession, *, recipe_id: int) -> Optional[Recipe]:
+async def get_recipe_by_id(db: AsyncSession, *, recipe_id: int) -> Recipe | None:
     query = select(Recipe).where(Recipe.id == recipe_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()
@@ -178,9 +176,6 @@ async def update_recipe(
 
         db_recipe.ingredients = json_ingredients
 
-    if "image_urls" in update_data and update_data["image_urls"] is not None:
-        update_data["image_urls"] = [str(url) for url in update_data["image_urls"]]
-
     for field, value in update_data.items():
         setattr(db_recipe, field, value)
 
@@ -201,7 +196,7 @@ async def update_recipe(
     return db_recipe
 
 
-async def delete_recipe(db: AsyncSession, *, recipe_id: int) -> Optional[Recipe]:
+async def delete_recipe(db: AsyncSession, *, recipe_id: int) -> Recipe | None:
     db_recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
     if db_recipe:
         await db.delete(db_recipe)
@@ -221,19 +216,19 @@ async def delete_recipe_images(
     current_urls = set(db_recipe.image_urls) if db_recipe.image_urls else set()
     target_urls = set(urls_to_delete)
 
-    urls_to_proccess = current_urls.intersection(target_urls)
+    urls_to_process = current_urls.intersection(target_urls)
 
-    if not urls_to_proccess:
+    if not urls_to_process:
         return db_recipe
 
-    remaining_urls = list(current_urls - urls_to_proccess)
+    remaining_urls = list(current_urls - urls_to_process)
 
     db_recipe.image_urls = remaining_urls
     db.add(db_recipe)
     await db.commit()
     await db.refresh(db_recipe)
 
-    for url in urls_to_proccess:
+    for url in urls_to_process:
         await s3_client.delete_image_from_s3(url)
 
     return db_recipe
@@ -243,9 +238,9 @@ async def search_recipes_by_vector(
     db: AsyncSession,
     *,
     query_str: str,
-    include_str: Optional[str] = None,
-    exclude_str: Optional[str] = None,
-) -> List[Recipe]:
+    include_str: str | None = None,
+    exclude_str: str | None = None,
+) -> list[Recipe]:
     recipe_ids = await vector_store.search(query=query_str, n_results=50)
 
     if not recipe_ids:

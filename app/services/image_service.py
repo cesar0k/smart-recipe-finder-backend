@@ -24,10 +24,7 @@ async def validate_and_process_image(file: UploadFile) -> BytesIO:
     if real_content_type not in settings.ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Invalid file type: {real_content_type}.",
-                "Required: {settings.ALLOWED_IMAGE_TYPES}",
-            ),
+            detail=f"Invalid file type: {real_content_type}. Required: {settings.ALLOWED_IMAGE_TYPES}",
         )
 
     try:
@@ -39,10 +36,7 @@ async def validate_and_process_image(file: UploadFile) -> BytesIO:
         ):
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    "Image resolution too high. ",
-                    "Max {settings.MAX_IMAGE_WIDTH}X{settings.MAX_IMAGE_HEIGHT}",
-                ),
+                detail=f"Image resolution too high. Max {settings.MAX_IMAGE_WIDTH}x{settings.MAX_IMAGE_HEIGHT}",
             )
 
         return BytesIO(content)

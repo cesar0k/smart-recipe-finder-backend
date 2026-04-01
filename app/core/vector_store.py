@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import sys
-from typing import Any, Dict, List, Optional, Self, cast
+from typing import Any, Self, cast
 
 import chromadb
 import numpy as np
@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStore:
-    _instance: Optional[Self] = None
-    model: Optional[SentenceTransformer] = None
+    _instance: Self | None = None
+    model: SentenceTransformer | None = None
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
         if kwargs.get("force_new", False):
@@ -30,7 +30,7 @@ class VectorStore:
         return cls._instance
 
     def __init__(
-        self, collection_name: Optional[str] = None, force_new: bool = False
+        self, collection_name: str | None = None, force_new: bool = False
     ) -> None:
         if getattr(self, "_initialized", False) and not force_new:
             return
@@ -51,13 +51,18 @@ class VectorStore:
             logger.error(f"Failed to connect to ChromaDB: {ex}")
 
         self.model = None
+        self._collection: Collection | None = None
 
         self._initialized = True
         logger.info("Vector Store client initialized.")
 
     @property
     def collection(self) -> Collection:
-        return self.client.get_or_create_collection(name=self.collection_name)
+        if self._collection is None:
+            self._collection = self.client.get_or_create_collection(
+                name=self.collection_name
+            )
+        return self._collection
 
     def preload_model(self) -> None:
         if self.model is None:
@@ -92,7 +97,7 @@ class VectorStore:
         recipe_id: int,
         title: str,
         full_text: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         if metadata is None:
             metadata = {"title": title}
@@ -111,7 +116,7 @@ class VectorStore:
 
         await asyncio.to_thread(_sync_upsert)
 
-    async def search(self, query: str, n_results: int = 5) -> List[int]:
+    async def search(self, query: str, n_results: int = 5) -> list[int]:
         query_vec_result = await self.embed_text(query)
         query_embedding_list = query_vec_result.tolist()
 
@@ -136,7 +141,9 @@ class VectorStore:
             self.client.delete_collection(self.collection_name)
         except Exception as ex:
             logger.error(f"Failed to delete collection: {ex}")
-        self.client.get_or_create_collection(name=self.collection_name)
+        self._collection = self.client.get_or_create_collection(
+            name=self.collection_name
+        )
 
 
 vector_store = VectorStore()
