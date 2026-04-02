@@ -82,15 +82,26 @@ class VectorStore:
                 raise RuntimeError("Failed to load SentenceTransformer model.")
         return self.model
 
-    async def embed_text(self, text: str) -> np.ndarray:
+    _SEARCH_INSTRUCTION = (
+        "Instruct: Given a user query about food or cooking, "
+        "retrieve the most relevant recipes\nQuery: "
+    )
+
+    async def _embed(self, text: str) -> np.ndarray:
         model = self._get_model()
 
         def _encode(t: str) -> np.ndarray:
-            # Helper to resolve overloaded model.encode for mypy
             return model.encode(t, convert_to_numpy=True)
 
-        embedding = await asyncio.to_thread(_encode, text)
-        return embedding
+        return await asyncio.to_thread(_encode, text)
+
+    async def embed_document(self, text: str) -> np.ndarray:
+        """Embed a recipe document (passage) with the 'passage:' prefix."""
+        return await self._embed(f"passage: {text}")
+
+    async def embed_query(self, text: str) -> np.ndarray:
+        """Embed a search query with the instruct prefix."""
+        return await self._embed(f"{self._SEARCH_INSTRUCTION}{text}")
 
     async def upsert_recipe(
         self,
@@ -103,7 +114,7 @@ class VectorStore:
             metadata = {"title": title}
         safe_metadata = {k: ("" if v is None else v) for k, v in metadata.items()}
 
-        embedding_result = await self.embed_text(full_text)
+        embedding_result = await self.embed_document(full_text)
         embedding_list = embedding_result.tolist()
 
         def _sync_upsert() -> None:
@@ -117,7 +128,7 @@ class VectorStore:
         await asyncio.to_thread(_sync_upsert)
 
     async def search(self, query: str, n_results: int = 5) -> list[int]:
-        query_vec_result = await self.embed_text(query)
+        query_vec_result = await self.embed_query(query)
         query_embedding_list = query_vec_result.tolist()
 
         def _sync_search() -> VectorQueryResult:
