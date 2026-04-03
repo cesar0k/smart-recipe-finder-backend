@@ -8,9 +8,12 @@ from sqlalchemy import delete
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sqlalchemy.future import select
+
 from app.core.vector_store import vector_store
 from app.db.session import AsyncSessionLocal
 from app.models.recipe import Recipe
+from app.models.user import User
 from app.schemas.recipe_create import RecipeCreate
 from app.services import recipe_service
 
@@ -34,6 +37,16 @@ async def seed(lang: str) -> None:
     vector_store.clear()
 
     async with AsyncSessionLocal() as db:
+        # Find an admin user to assign as recipe owner
+        result = await db.execute(
+            select(User).where(User.role == "admin").limit(1)
+        )
+        admin_user = result.scalar_one_or_none()
+
+        if admin_user is None:
+            print("Error: No admin user found. Run create_admin.py first.")
+            return
+
         print(" - Cleaning old data...")
         await db.execute(delete(Recipe))
         await db.commit()
@@ -48,7 +61,9 @@ async def seed(lang: str) -> None:
                 del r_input["id"]
 
             recipe_in = RecipeCreate(**r_input)
-            await recipe_service.create_recipe(db=db, recipe_in=recipe_in)
+            await recipe_service.create_recipe(
+                db=db, recipe_in=recipe_in, current_user=admin_user
+            )
 
         print(f"Successfully inserted {len(recipes_data)} recipes.")
 

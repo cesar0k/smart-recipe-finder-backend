@@ -7,8 +7,10 @@ from httpx import AsyncClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.core.security import hash_password
 from app.core.vector_store import VectorStore
 from app.models.recipe import Recipe
+from app.models.user import User
 from app.schemas import RecipeCreate
 from app.services import recipe_service
 
@@ -68,19 +70,25 @@ class TestRecipeOperations:
     }
 
     @pytest.fixture
-    async def existing_recipe(self, async_client: AsyncClient) -> Dict[str, Any]:
+    async def existing_recipe(
+        self, async_client: AsyncClient, auth_headers: Dict[str, str]
+    ) -> Dict[str, Any]:
         response = await async_client.post(
-            "/api/v1/recipes/", json=self.BASE_RECIPE_DATA
+            "/api/v1/recipes/", json=self.BASE_RECIPE_DATA, headers=auth_headers
         )
         assert response.status_code == 201
         return cast(Dict[str, Any], response.json())
 
     @pytest.mark.smoke
-    async def test_create_recipe(self, async_client: AsyncClient) -> None:
+    async def test_create_recipe(
+        self, async_client: AsyncClient, auth_headers: Dict[str, str]
+    ) -> None:
         new_recipe = self.BASE_RECIPE_DATA.copy()
         new_recipe["title"] = "New Created Recipe"
 
-        response = await async_client.post("/api/v1/recipes/", json=new_recipe)
+        response = await async_client.post(
+            "/api/v1/recipes/", json=new_recipe, headers=auth_headers
+        )
         assert response.status_code == 201
         data = response.json()
         assert data["title"] == new_recipe["title"]
@@ -116,13 +124,18 @@ class TestRecipeOperations:
         assert response.status_code == 404
 
     async def test_update_recipe_partial(
-        self, async_client: AsyncClient, existing_recipe: Dict[str, Any]
+        self,
+        async_client: AsyncClient,
+        auth_headers: Dict[str, str],
+        existing_recipe: Dict[str, Any],
     ) -> None:
         recipe_id = existing_recipe["id"]
         update_payload = {"title": "Updated Title", "difficulty": "hard"}
 
         response = await async_client.patch(
-            f"/api/v1/recipes/{recipe_id}", json=update_payload
+            f"/api/v1/recipes/{recipe_id}",
+            json=update_payload,
+            headers=auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
@@ -132,13 +145,18 @@ class TestRecipeOperations:
         assert data["cuisine"] == existing_recipe["cuisine"]
 
     async def test_update_recipe_ingredients(
-        self, async_client: AsyncClient, existing_recipe: Dict[str, Any]
+        self,
+        async_client: AsyncClient,
+        auth_headers: Dict[str, str],
+        existing_recipe: Dict[str, Any],
     ) -> None:
         recipe_id = existing_recipe["id"]
         new_ingredients = ["new_ing1", "new_ing2"]
 
         response = await async_client.patch(
-            f"/api/v1/recipes/{recipe_id}", json={"ingredients": new_ingredients}
+            f"/api/v1/recipes/{recipe_id}",
+            json={"ingredients": new_ingredients},
+            headers=auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
@@ -147,30 +165,45 @@ class TestRecipeOperations:
         assert actual_ingredients == set(new_ingredients)
 
     async def test_update_recipe_not_found(
-        self, async_client: AsyncClient, existing_recipe: Dict[str, Any]
+        self,
+        async_client: AsyncClient,
+        auth_headers: Dict[str, str],
+        existing_recipe: Dict[str, Any],
     ) -> None:
         recipe_id = existing_recipe["id"]
         update_payload = {"title": "Ghost Recipe"}
         response = await async_client.patch(
-            f"/api/v1/recipes/{recipe_id + 1}", json=update_payload
+            f"/api/v1/recipes/{recipe_id + 1}",
+            json=update_payload,
+            headers=auth_headers,
         )
         assert response.status_code == 404
 
     async def test_delete_recipe(
-        self, async_client: AsyncClient, existing_recipe: Dict[str, Any]
+        self,
+        async_client: AsyncClient,
+        auth_headers: Dict[str, str],
+        existing_recipe: Dict[str, Any],
     ) -> None:
         recipe_id = existing_recipe["id"]
-        response = await async_client.delete(f"/api/v1/recipes/{recipe_id}")
+        response = await async_client.delete(
+            f"/api/v1/recipes/{recipe_id}", headers=auth_headers
+        )
         assert response.status_code == 200
 
         get_response = await async_client.get(f"/api/v1/recipes/{recipe_id}")
         assert get_response.status_code == 404
 
     async def test_delete_recipe_not_found(
-        self, async_client: AsyncClient, existing_recipe: Dict[str, Any]
+        self,
+        async_client: AsyncClient,
+        auth_headers: Dict[str, str],
+        existing_recipe: Dict[str, Any],
     ) -> None:
         recipe_id = existing_recipe["id"]
-        response = await async_client.delete(f"/api/v1/recipes/{recipe_id + 1}")
+        response = await async_client.delete(
+            f"/api/v1/recipes/{recipe_id + 1}", headers=auth_headers
+        )
         assert response.status_code == 404
 
 
@@ -197,6 +230,16 @@ class BaseTestRecipeEvaluation:
             await session.execute(delete(Recipe))
             await session.commit()
 
+            eval_user = User(
+                email="eval@test.local",
+                username="eval_user",
+                hashed_password=hash_password("eval_password"),
+                role="admin",
+            )
+            session.add(eval_user)
+            await session.commit()
+            await session.refresh(eval_user)
+
             for recipe in self.recipes_sample:
                 r_data = recipe.copy()
                 if "id" in r_data:
@@ -204,7 +247,9 @@ class BaseTestRecipeEvaluation:
 
                 recipe_in = RecipeCreate(**r_data)
 
-                await recipe_service.create_recipe(db=session, recipe_in=recipe_in)
+                await recipe_service.create_recipe(
+                    db=session, recipe_in=recipe_in, current_user=eval_user
+                )
         yield
 
         recipe_service.vector_store = original_store

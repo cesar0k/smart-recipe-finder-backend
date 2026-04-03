@@ -28,8 +28,10 @@ sys.path.append(os.getcwd())
 import matplotlib
 
 from app.core import text_utils
+from app.core.security import hash_password
 from app.core.vector_store import VectorStore
 from app.models.recipe import Recipe
+from app.models.user import User
 from app.schemas.recipe_create import RecipeCreate
 from app.services import recipe_service
 from tests.testing_config import testing_settings
@@ -74,6 +76,17 @@ def teardown_test_db() -> None:
 
 
 async def seed_eval_data(session: AsyncSession, recipes_path: Path) -> None:
+    # Create an admin user for seeding (recipes need an owner)
+    admin_user = User(
+        email="eval-admin@test.local",
+        username="eval_admin",
+        hashed_password=hash_password("eval_password"),
+        role="admin",
+    )
+    session.add(admin_user)
+    await session.commit()
+    await session.refresh(admin_user)
+
     with open(recipes_path) as f:
         recipe_samples = json.load(f)
 
@@ -85,7 +98,9 @@ async def seed_eval_data(session: AsyncSession, recipes_path: Path) -> None:
 
         recipe_in = RecipeCreate(**r_input)
 
-        await recipe_service.create_recipe(db=session, recipe_in=recipe_in)
+        await recipe_service.create_recipe(
+            db=session, recipe_in=recipe_in, current_user=admin_user
+        )
 
 
 async def slow_smart_jsonb_filter(
