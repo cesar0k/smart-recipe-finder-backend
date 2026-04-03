@@ -9,6 +9,10 @@ class Settings(BaseSettings):
 
     APP_PORT: int = 8001
 
+    SECRET_KEY: str = ""
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
     BACKEND_CORS_ORIGINS: list[str] = []
 
     DB_ROOT_PASSWORD: str = ""
@@ -41,6 +45,7 @@ class Settings(BaseSettings):
     def check_required_fields(self) -> Self:
         missing_fields = []
         required_fields = [
+            "SECRET_KEY",
             "DB_ROOT_PASSWORD",
             "DB_NAME",
             "DB_USER",

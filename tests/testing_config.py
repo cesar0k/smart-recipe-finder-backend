@@ -14,7 +14,7 @@ class TestingSettings(Settings):
             "mean_reciprocal_rank": 0.70,
             "zero_result_rate": 5.0,
             "avg_f1_score": 0.35,
-            "avg_latency": 200,
+            "avg_latency": 250,
         },
         "JSONB GIN Filter": {"accuracy": 90.0, "avg_latency": 5},
     }

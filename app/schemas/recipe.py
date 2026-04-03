@@ -14,6 +14,9 @@ class Recipe(RecipeBase):
     image_urls: list[Annotated[HttpUrl, StringConstraints(max_length=1024)]] = Field(
         default_factory=list, max_length=10
     )
+    owner_id: int | None = None
+    status: str = "approved"
+    rejection_reason: str | None = None
 
     @field_validator("image_urls", mode="before")
     @classmethod

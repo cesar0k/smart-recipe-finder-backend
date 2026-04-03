@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from app.models.base import Base
-from app.models.recipe import Recipe
+from app.models.recipe import Recipe  # noqa: F401
+from app.models.user import User  # noqa: F401
+from app.models.refresh_token import RefreshToken  # noqa: F401
+from app.models.recipe_draft import RecipeDraft  # noqa: F401
 from app.core.config import settings
 
 # this is the Alembic Config object, which provides

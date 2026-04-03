@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import Integer, String
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
@@ -22,4 +22,13 @@ class Recipe(Base):
     )
     image_urls: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, server_default=text("'{}'"), nullable=False
+    )
+    owner_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="approved", server_default=text("'approved'"), nullable=False
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(
+        String(1000), nullable=True
     )
