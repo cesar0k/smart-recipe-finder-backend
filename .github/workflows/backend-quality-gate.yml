@@ -50,6 +50,8 @@ jobs:
           echo "S3_ACCESS_KEY=${{ secrets.MINIO_ROOT_USER }}" >> .env
           echo "S3_SECRET_KEY=${{ secrets.MINIO_ROOT_PASSWORD }}" >> .env
 
+          echo "SECRET_KEY=$(openssl rand -hex 32)" >> .env
+
       - name: Load .env to CI Environment
         run: cat .env >> $GITHUB_ENV
 

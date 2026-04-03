@@ -13,6 +13,8 @@ from app.core.s3_client import s3_client
 from app.core.text_utils import get_word_forms
 from app.core.vector_store import vector_store
 from app.models import Recipe
+from app.models.recipe_draft import RecipeDraft
+from app.models.user import User
 from app.schemas import RecipeCreate, RecipeUpdate
 
 __all__ = [
@@ -80,7 +82,6 @@ def _apply_ingredient_filter(
             for term in terms:
                 safe_term = re.escape(term)
                 pattern = f"\\y{safe_term}\\y"
-
                 term_conditions.append(json_as_text.op("~*")(pattern))
 
             query = query.where(or_(*term_conditions))
@@ -101,24 +102,37 @@ def _apply_ingredient_filter(
     return query
 
 
-async def create_recipe(db: AsyncSession, *, recipe_in: RecipeCreate) -> Recipe:
+async def create_recipe(
+    db: AsyncSession,
+    *,
+    recipe_in: RecipeCreate,
+    current_user: User,
+) -> Recipe:
     recipe_data = recipe_in.model_dump(exclude={"ingredients"})
     json_ingredients = [{"name": name} for name in recipe_in.ingredients]
 
-    db_recipe = Recipe(**recipe_data, ingredients=json_ingredients)
+    # Moderators and admins get auto-approved, regular users go to pending
+    status = "approved" if current_user.role in ("moderator", "admin") else "pending"
+
+    db_recipe = Recipe(
+        **recipe_data,
+        ingredients=json_ingredients,
+        owner_id=current_user.id,
+        status=status,
+    )
 
     db.add(db_recipe)
     await db.commit()
     await db.refresh(db_recipe)
 
-    text, meta = _create_semantic_document(db_recipe)
-
-    await vector_store.upsert_recipe(
-        recipe_id=db_recipe.id,
-        title=db_recipe.title,
-        full_text=text,
-        metadata=meta,
-    )
+    if db_recipe.status == "approved":
+        text, meta = _create_semantic_document(db_recipe)
+        await vector_store.upsert_recipe(
+            recipe_id=db_recipe.id,
+            title=db_recipe.title,
+            full_text=text,
+            metadata=meta,
+        )
 
     return db_recipe
 
@@ -130,11 +144,26 @@ async def get_all_recipes(
     limit: int = 100,
     include_str: str | None = None,
     exclude_str: str | None = None,
+    current_user: User | None = None,
 ) -> Sequence[Recipe]:
     query = select(Recipe)
 
-    query = _apply_ingredient_filter(query, include_str, exclude_str)
+    if current_user is not None and current_user.role in ("moderator", "admin"):
+        # Moderators/admins see all recipes
+        pass
+    elif current_user is not None:
+        # Authenticated user: approved + own recipes (any status)
+        query = query.where(
+            or_(
+                Recipe.status == "approved",
+                Recipe.owner_id == current_user.id,
+            )
+        )
+    else:
+        # Anonymous: only approved
+        query = query.where(Recipe.status == "approved")
 
+    query = _apply_ingredient_filter(query, include_str, exclude_str)
     query = query.order_by(Recipe.id.desc())
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
@@ -148,21 +177,44 @@ async def get_recipe_by_id(db: AsyncSession, *, recipe_id: int) -> Recipe | None
 
 
 async def update_recipe(
-    db: AsyncSession, *, db_recipe: Recipe, recipe_in: RecipeUpdate
+    db: AsyncSession,
+    *,
+    db_recipe: Recipe,
+    recipe_in: RecipeUpdate,
+    current_user: User,
+) -> Recipe | RecipeDraft:
+    """Update a recipe.
+
+    - Moderator/admin: update directly.
+    - Regular user (owner): create a draft instead.
+    """
+    if current_user.role in ("moderator", "admin"):
+        return await _update_recipe_directly(db, db_recipe=db_recipe, recipe_in=recipe_in)
+    else:
+        return await _create_draft(
+            db, db_recipe=db_recipe, recipe_in=recipe_in, author=current_user
+        )
+
+
+async def _update_recipe_directly(
+    db: AsyncSession,
+    *,
+    db_recipe: Recipe,
+    recipe_in: RecipeUpdate,
 ) -> Recipe:
+    """Apply update directly to recipe (for moderator/admin)."""
     update_data = recipe_in.model_dump(exclude_unset=True)
 
     if "image_urls" in update_data:
         raw_urls = update_data.pop("image_urls")
 
         if raw_urls is None:
-            new_urls_list = []
+            new_urls_list: list[str] = []
         else:
             new_urls_list = [str(url) for url in raw_urls]
 
         current_urls = set(db_recipe.image_urls) if db_recipe.image_urls else set()
         new_urls = set(new_urls_list)
-
         urls_to_delete = current_urls - new_urls
 
         db_recipe.image_urls = new_urls_list
@@ -173,7 +225,6 @@ async def update_recipe(
     if "ingredients" in update_data:
         raw_ingredients = update_data.pop("ingredients")
         json_ingredients = [{"name": i} for i in raw_ingredients]
-
         db_recipe.ingredients = json_ingredients
 
     for field, value in update_data.items():
@@ -181,19 +232,64 @@ async def update_recipe(
 
     db.add(db_recipe)
     await db.commit()
-
     await db.refresh(db_recipe)
 
-    text, meta = _create_semantic_document(db_recipe)
-
-    await vector_store.upsert_recipe(
-        recipe_id=db_recipe.id,
-        title=db_recipe.title,
-        full_text=text,
-        metadata=meta,
-    )
+    # Re-index if approved
+    if db_recipe.status == "approved":
+        text, meta = _create_semantic_document(db_recipe)
+        await vector_store.upsert_recipe(
+            recipe_id=db_recipe.id,
+            title=db_recipe.title,
+            full_text=text,
+            metadata=meta,
+        )
 
     return db_recipe
+
+
+async def _create_draft(
+    db: AsyncSession,
+    *,
+    db_recipe: Recipe,
+    recipe_in: RecipeUpdate,
+    author: User,
+) -> RecipeDraft:
+    """Create a draft with proposed changes (for regular users)."""
+    # Start with current recipe data
+    draft_data: dict[str, Any] = {
+        "title": db_recipe.title,
+        "instructions": db_recipe.instructions,
+        "cooking_time_in_minutes": db_recipe.cooking_time_in_minutes,
+        "difficulty": db_recipe.difficulty,
+        "cuisine": db_recipe.cuisine,
+        "ingredients": db_recipe.ingredients,
+    }
+
+    # Apply proposed changes on top
+    update_data = recipe_in.model_dump(exclude_unset=True)
+
+    # Exclude image_urls from draft (images are managed separately)
+    update_data.pop("image_urls", None)
+
+    if "ingredients" in update_data:
+        raw_ingredients = update_data.pop("ingredients")
+        draft_data["ingredients"] = [{"name": i} for i in raw_ingredients]
+
+    for field, value in update_data.items():
+        if field in draft_data:
+            draft_data[field] = value
+
+    draft = RecipeDraft(
+        recipe_id=db_recipe.id,
+        author_id=author.id,
+        status="pending",
+        **draft_data,
+    )
+
+    db.add(draft)
+    await db.commit()
+    await db.refresh(draft)
+    return draft
 
 
 async def delete_recipe(db: AsyncSession, *, recipe_id: int) -> Recipe | None:
@@ -201,7 +297,6 @@ async def delete_recipe(db: AsyncSession, *, recipe_id: int) -> Recipe | None:
     if db_recipe:
         await db.delete(db_recipe)
         await db.commit()
-
         await vector_store.delete_recipe(recipe_id)
     return db_recipe
 
@@ -215,14 +310,12 @@ async def delete_recipe_images(
 
     current_urls = set(db_recipe.image_urls) if db_recipe.image_urls else set()
     target_urls = set(urls_to_delete)
-
     urls_to_process = current_urls.intersection(target_urls)
 
     if not urls_to_process:
         return db_recipe
 
     remaining_urls = list(current_urls - urls_to_process)
-
     db_recipe.image_urls = remaining_urls
     db.add(db_recipe)
     await db.commit()
@@ -246,7 +339,11 @@ async def search_recipes_by_vector(
     if not recipe_ids:
         return []
 
-    query = select(Recipe).where(Recipe.id.in_(recipe_ids))
+    # Only return approved recipes in search results
+    query = select(Recipe).where(
+        Recipe.id.in_(recipe_ids),
+        Recipe.status == "approved",
+    )
 
     query = _apply_ingredient_filter(query, include_str, exclude_str)
 

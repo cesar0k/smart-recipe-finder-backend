@@ -6,11 +6,20 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models, schemas
+from app.api.deps import get_current_user, get_current_user_optional
 from app.core.s3_client import s3_client
 from app.db.session import get_db
+from app.models.user import User
 from app.services import image_service, recipe_service
 
 router = APIRouter()
+
+
+def _check_recipe_owner(recipe: models.Recipe, user: User) -> None:
+    if user.role in ("moderator", "admin"):
+        return
+    if recipe.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this recipe")
 
 
 @router.post(
@@ -19,9 +28,12 @@ router = APIRouter()
 async def create_new_recipe(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     recipe_in: schemas.RecipeCreate,
 ) -> schemas.Recipe:
-    db_recipe = await recipe_service.create_recipe(db=db, recipe_in=recipe_in)
+    db_recipe = await recipe_service.create_recipe(
+        db=db, recipe_in=recipe_in, current_user=current_user
+    )
     return schemas.Recipe.model_validate(db_recipe)
 
 
@@ -29,6 +41,7 @@ async def create_new_recipe(
 async def read_recipes(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     include_ingredients: str | None = Query(
@@ -44,55 +57,9 @@ async def read_recipes(
         limit=limit,
         include_str=include_ingredients,
         exclude_str=exclude_ingredients,
+        current_user=current_user,
     )
     return [schemas.Recipe.model_validate(r) for r in recipes]
-
-
-@router.get(
-    "/{recipe_id}", response_model=schemas.Recipe, operation_id="read_recipe_by_id"
-)
-async def read_recipe_by_id(
-    *, db: Annotated[AsyncSession, Depends(get_db)], recipe_id: int
-) -> schemas.Recipe:
-    recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    return schemas.Recipe.model_validate(recipe)
-
-
-@router.patch(
-    "/{recipe_id}", response_model=schemas.Recipe, operation_id="update_recipe"
-)
-async def update_existing_recipe(
-    *,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    recipe_id: int,
-    recipe_in: schemas.RecipeUpdate,
-) -> schemas.Recipe:
-    db_recipe: models.Recipe | None = await recipe_service.get_recipe_by_id(
-        db=db, recipe_id=recipe_id
-    )
-    if not db_recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    updated_recipe = await recipe_service.update_recipe(
-        db=db, db_recipe=db_recipe, recipe_in=recipe_in
-    )
-    return schemas.Recipe.model_validate(updated_recipe)
-
-
-@router.delete(
-    "/{recipe_id}", response_model=schemas.Recipe, operation_id="delete_recipe"
-)
-async def delete_existing_recipe(
-    *, db: Annotated[AsyncSession, Depends(get_db)], recipe_id: int
-) -> schemas.Recipe:
-    deleted_recipe = await recipe_service.delete_recipe(db=db, recipe_id=recipe_id)
-    if not deleted_recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    return schemas.Recipe.model_validate(deleted_recipe)
 
 
 @router.get(
@@ -120,6 +87,72 @@ async def search_recipes(
     return [schemas.Recipe.model_validate(r) for r in recipes]
 
 
+@router.get(
+    "/{recipe_id}", response_model=schemas.Recipe, operation_id="read_recipe_by_id"
+)
+async def read_recipe_by_id(
+    *, db: Annotated[AsyncSession, Depends(get_db)], recipe_id: int
+) -> schemas.Recipe:
+    recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    return schemas.Recipe.model_validate(recipe)
+
+
+@router.patch(
+    "/{recipe_id}",
+    response_model=schemas.Recipe | schemas.RecipeDraftResponse,
+    operation_id="update_recipe",
+)
+async def update_existing_recipe(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    recipe_id: int,
+    recipe_in: schemas.RecipeUpdate,
+) -> schemas.Recipe | schemas.RecipeDraftResponse:
+    db_recipe: models.Recipe | None = await recipe_service.get_recipe_by_id(
+        db=db, recipe_id=recipe_id
+    )
+    if not db_recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    _check_recipe_owner(db_recipe, current_user)
+
+    result = await recipe_service.update_recipe(
+        db=db, db_recipe=db_recipe, recipe_in=recipe_in, current_user=current_user
+    )
+
+    # If a draft was created (regular user editing), return draft response
+    if isinstance(result, models.RecipeDraft):
+        return schemas.RecipeDraftResponse.model_validate(result)
+
+    return schemas.Recipe.model_validate(result)
+
+
+@router.delete(
+    "/{recipe_id}", response_model=schemas.Recipe, operation_id="delete_recipe"
+)
+async def delete_existing_recipe(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    recipe_id: int,
+) -> schemas.Recipe:
+    db_recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if not db_recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    _check_recipe_owner(db_recipe, current_user)
+
+    deleted_recipe = await recipe_service.delete_recipe(db=db, recipe_id=recipe_id)
+    if not deleted_recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    return schemas.Recipe.model_validate(deleted_recipe)
+
+
 @router.post(
     "/{recipe_id}/image",
     response_model=schemas.Recipe,
@@ -128,12 +161,15 @@ async def search_recipes(
 async def upload_recipe_images(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     recipe_id: int,
     files: Annotated[list[UploadFile], File(...)],
 ) -> schemas.Recipe:
     recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
+
+    _check_recipe_owner(recipe, current_user)
 
     if len(files) > 5:
         raise HTTPException(
@@ -171,9 +207,16 @@ async def upload_recipe_images(
 async def delete_recipe_images(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     recipe_id: int,
     delete_data: schemas.RecipeImagesDelete,
 ) -> schemas.Recipe:
+    recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    _check_recipe_owner(recipe, current_user)
+
     urls_as_strings = [str(url) for url in delete_data.image_urls]
 
     updated_recipe = await recipe_service.delete_recipe_images(
