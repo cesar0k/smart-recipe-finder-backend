@@ -18,8 +18,10 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy_utils import create_database, database_exists, drop_database
 
 from alembic import command
+from app.core.security import create_access_token, hash_password
 from app.core.vector_store import VectorStore
 from app.models.recipe import Recipe
+from app.models.user import User
 from tests.testing_config import testing_settings
 
 
@@ -109,3 +111,28 @@ async def async_client(
         yield client
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function")
+async def auth_headers(
+    db_engine: AsyncEngine,
+) -> AsyncGenerator[dict[str, str], None]:
+    """Create a test admin user and return auth headers with a valid JWT."""
+    async with async_sessionmaker(
+        bind=db_engine, expire_on_commit=False
+    )() as session:
+        user = User(
+            email="test-admin@test.local",
+            username="test_admin",
+            hashed_password=hash_password("test_password"),
+            role="admin",
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+
+        token = create_access_token(user.id, user.role)
+        yield {"Authorization": f"Bearer {token}"}
+
+        await session.delete(user)
+        await session.commit()
