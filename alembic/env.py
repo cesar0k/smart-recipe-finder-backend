@@ -12,6 +12,8 @@ from app.models.recipe import Recipe  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.refresh_token import RefreshToken  # noqa: F401
 from app.models.recipe_draft import RecipeDraft  # noqa: F401
+from app.models.notification import Notification  # noqa: F401
+from app.models.moderation_log import ModerationLog  # noqa: F401
 from app.core.config import settings
 
 # this is the Alembic Config object, which provides

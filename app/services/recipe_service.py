@@ -7,6 +7,7 @@ from sqlalchemy import String, not_, or_
 from sqlalchemy import cast as sa_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.selectable import Select
 
 from app.core.s3_client import s3_client
@@ -20,12 +21,18 @@ from app.schemas import RecipeCreate, RecipeUpdate
 __all__ = [
     "create_recipe",
     "get_all_recipes",
+    "get_user_recipes",
     "get_recipe_by_id",
     "update_recipe",
     "delete_recipe",
     "search_recipes_by_vector",
     "vector_store",
 ]
+
+
+def _with_owner(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
+    """Add selectinload for owner relationship."""
+    return query.options(selectinload(Recipe.owner))
 
 
 def _create_semantic_document(recipe: Recipe) -> tuple[str, dict[str, Any]]:
@@ -134,6 +141,28 @@ async def create_recipe(
             metadata=meta,
         )
 
+    # Notify moderators/admins about new pending recipe
+    if db_recipe.status == "pending":
+        from app.services import notification_service
+
+        mod_query = select(User.id).where(
+            User.role.in_(["moderator", "admin"]),
+            User.is_active == True,  # noqa: E712
+        )
+        mod_result = await db.execute(mod_query)
+        mod_ids = [row[0] for row in mod_result.all()]
+
+        if mod_ids:
+            await notification_service.create_notifications_bulk(
+                db,
+                user_ids=mod_ids,
+                type="new_pending_recipe",
+                title=db_recipe.title,
+                message="",
+                recipe_id=db_recipe.id,
+            )
+            await db.commit()
+
     return db_recipe
 
 
@@ -144,25 +173,9 @@ async def get_all_recipes(
     limit: int = 100,
     include_str: str | None = None,
     exclude_str: str | None = None,
-    current_user: User | None = None,
 ) -> Sequence[Recipe]:
-    query = select(Recipe)
-
-    if current_user is not None and current_user.role in ("moderator", "admin"):
-        # Moderators/admins see all recipes
-        pass
-    elif current_user is not None:
-        # Authenticated user: approved + own recipes (any status)
-        query = query.where(
-            or_(
-                Recipe.status == "approved",
-                Recipe.owner_id == current_user.id,
-            )
-        )
-    else:
-        # Anonymous: only approved
-        query = query.where(Recipe.status == "approved")
-
+    """Public feed — only approved recipes. Always."""
+    query = _with_owner(select(Recipe).where(Recipe.status == "approved"))
     query = _apply_ingredient_filter(query, include_str, exclude_str)
     query = query.order_by(Recipe.id.desc())
     query = query.offset(skip).limit(limit)
@@ -170,8 +183,45 @@ async def get_all_recipes(
     return result.scalars().all()
 
 
+async def get_user_recipes(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    include_pending_drafts: bool = False,
+) -> Sequence[Recipe]:
+    """Current user's recipes — all statuses."""
+    query = _with_owner(
+        select(Recipe)
+        .where(Recipe.owner_id == user_id)
+        .order_by(Recipe.id.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    recipes = result.scalars().all()
+
+    # Optionally mark which recipes have pending drafts
+    if include_pending_drafts and recipes:
+        recipe_ids = [r.id for r in recipes]
+        draft_result = await db.execute(
+            select(RecipeDraft.recipe_id)
+            .where(
+                RecipeDraft.recipe_id.in_(recipe_ids),
+                RecipeDraft.status == "pending",
+            )
+            .distinct()
+        )
+        draft_recipe_ids = {row[0] for row in draft_result.all()}
+        for r in recipes:
+            r.has_pending_draft = r.id in draft_recipe_ids
+
+    return recipes
+
+
 async def get_recipe_by_id(db: AsyncSession, *, recipe_id: int) -> Recipe | None:
-    query = select(Recipe).where(Recipe.id == recipe_id)
+    query = _with_owner(select(Recipe).where(Recipe.id == recipe_id))
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
@@ -292,10 +342,87 @@ async def _create_draft(
     return draft
 
 
-async def delete_recipe(db: AsyncSession, *, recipe_id: int) -> Recipe | None:
+async def resubmit_recipe(
+    db: AsyncSession,
+    *,
+    db_recipe: Recipe,
+    recipe_in: RecipeUpdate,
+) -> Recipe:
+    """Re-submit a rejected recipe with corrections. Sets status back to pending."""
+    update_data = recipe_in.model_dump(exclude_unset=True)
+
+    # Exclude image_urls — managed separately
+    update_data.pop("image_urls", None)
+
+    if "ingredients" in update_data:
+        raw_ingredients = update_data.pop("ingredients")
+        db_recipe.ingredients = [{"name": i} for i in raw_ingredients]
+
+    for field, value in update_data.items():
+        setattr(db_recipe, field, value)
+
+    db_recipe.status = "pending"
+    db_recipe.rejection_reason = None
+
+    db.add(db_recipe)
+    await db.commit()
+    await db.refresh(db_recipe)
+
+    # Notify moderators about re-submitted recipe
+    from app.services import notification_service
+
+    mod_query = select(User.id).where(
+        User.role.in_(["moderator", "admin"]),
+        User.is_active == True,  # noqa: E712
+    )
+    mod_result = await db.execute(mod_query)
+    mod_ids = [row[0] for row in mod_result.all()]
+
+    if mod_ids:
+        await notification_service.create_notifications_bulk(
+            db,
+            user_ids=mod_ids,
+            type="new_pending_recipe",
+            title=db_recipe.title,
+            message="",
+            recipe_id=db_recipe.id,
+        )
+        await db.commit()
+
+    return db_recipe
+
+
+async def delete_recipe(
+    db: AsyncSession,
+    *,
+    recipe_id: int,
+    deleted_by: User | None = None,
+) -> Recipe | None:
     db_recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
     if db_recipe:
+        # Notify owner if recipe is deleted by a mod/admin (not the owner)
+        owner_id = db_recipe.owner_id
+        title = db_recipe.title
+        is_mod_delete = (
+            deleted_by is not None
+            and deleted_by.role in ("moderator", "admin")
+            and deleted_by.id != owner_id
+        )
+
         await db.delete(db_recipe)
+
+        if is_mod_delete and owner_id is not None:
+            from app.services import notification_service
+
+            await notification_service.create_notification(
+                db,
+                user_id=owner_id,
+                type="recipe_deleted",
+                title=title,
+                message="",
+                recipe_id=None,  # recipe is deleted, no link
+            )
+
         await db.commit()
         await vector_store.delete_recipe(recipe_id)
     return db_recipe
@@ -340,9 +467,11 @@ async def search_recipes_by_vector(
         return []
 
     # Only return approved recipes in search results
-    query = select(Recipe).where(
-        Recipe.id.in_(recipe_ids),
-        Recipe.status == "approved",
+    query = _with_owner(
+        select(Recipe).where(
+            Recipe.id.in_(recipe_ids),
+            Recipe.status == "approved",
+        )
     )
 
     query = _apply_ingredient_filter(query, include_str, exclude_str)

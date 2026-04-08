@@ -41,6 +41,9 @@ class Settings(BaseSettings):
 
     EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large-instruct"
 
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
     @model_validator(mode="after")
     def check_required_fields(self) -> Self:
         missing_fields = []

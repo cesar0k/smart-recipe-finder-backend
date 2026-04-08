@@ -14,7 +14,7 @@ from app.core.vector_store import vector_store
 from app.db.session import AsyncSessionLocal
 from app.models.recipe import Recipe
 from app.models.user import User
-from app.schemas.recipe_create import RecipeCreate
+from app.schemas import RecipeCreate
 from app.services import recipe_service
 
 DATASETS_PATH = Path(__file__).resolve().parents[1] / "datasets"

@@ -15,8 +15,10 @@ class Recipe(RecipeBase):
         default_factory=list, max_length=10
     )
     owner_id: int | None = None
+    owner_username: str | None = None
     status: str = "approved"
     rejection_reason: str | None = None
+    has_pending_draft: bool = False
 
     @field_validator("image_urls", mode="before")
     @classmethod
