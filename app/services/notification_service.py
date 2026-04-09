@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sequence
 
 from sqlalchemy import delete as sa_delete
@@ -7,9 +8,41 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.models.notification import Notification
+from app.schemas.notification import NotificationResponse
+
+logger = logging.getLogger(__name__)
 
 
-async def create_notification(
+async def _ws_notify_user(user_id: int, notif: Notification) -> None:
+    """Send real-time WS notification. Best-effort — never raises."""
+    try:
+        from app.core.ws_manager import ws_manager
+
+        notif_data = NotificationResponse.model_validate(notif).model_dump(mode="json")
+        await ws_manager.send_to_user(user_id, {
+            "type": "new_notification",
+            "notification": notif_data,
+        })
+    except Exception:
+        logger.debug("WS notify failed for user_id=%d (may not be connected)", user_id)
+
+
+async def _ws_notify_users(user_ids: list[int], notifications: list[Notification]) -> None:
+    """Send real-time WS notifications to multiple users. Best-effort."""
+    try:
+        from app.core.ws_manager import ws_manager
+
+        for uid, notif in zip(user_ids, notifications):
+            notif_data = NotificationResponse.model_validate(notif).model_dump(mode="json")
+            await ws_manager.send_to_user(uid, {
+                "type": "new_notification",
+                "notification": notif_data,
+            })
+    except Exception:
+        logger.debug("WS bulk notify failed")
+
+
+async def notify_and_broadcast(
     db: AsyncSession,
     *,
     user_id: int,
@@ -18,7 +51,7 @@ async def create_notification(
     message: str,
     recipe_id: int | None = None,
 ) -> Notification:
-    """Create a single notification. Uses flush (not commit) for transactional use."""
+    """Create notification, flush to DB, and send via WebSocket."""
     notif = Notification(
         user_id=user_id,
         type=type,
@@ -28,10 +61,11 @@ async def create_notification(
     )
     db.add(notif)
     await db.flush()
+    await _ws_notify_user(user_id, notif)
     return notif
 
 
-async def create_notifications_bulk(
+async def notify_bulk_and_broadcast(
     db: AsyncSession,
     *,
     user_ids: list[int],
@@ -40,7 +74,7 @@ async def create_notifications_bulk(
     message: str,
     recipe_id: int | None = None,
 ) -> list[Notification]:
-    """Create the same notification for multiple users (e.g., all moderators)."""
+    """Create notifications for multiple users, flush, and send via WebSocket."""
     notifications = []
     for uid in user_ids:
         n = Notification(
@@ -53,6 +87,7 @@ async def create_notifications_bulk(
         db.add(n)
         notifications.append(n)
     await db.flush()
+    await _ws_notify_users(user_ids, notifications)
     return notifications
 
 
