@@ -61,6 +61,9 @@ async def authenticate_user(
 
     if user is None:
         return None
+    if user.hashed_password is None:
+        # Google-only user — can't log in with password
+        return None
     if not verify_password(password, user.hashed_password):
         return None
     return user
@@ -90,6 +93,12 @@ async def create_token_pair(
     return access_token, refresh_value
 
 
+class DeactivatedUserError(Exception):
+    """Raised when refresh is attempted for a deactivated user."""
+
+    pass
+
+
 async def refresh_tokens(
     db: AsyncSession,
     *,
@@ -114,10 +123,15 @@ async def refresh_tokens(
     )
     user = user_result.scalar_one_or_none()
 
-    if user is None or not user.is_active:
+    if user is None:
         await db.delete(db_token)
         await db.commit()
         return None
+
+    if not user.is_active:
+        await db.delete(db_token)
+        await db.commit()
+        raise DeactivatedUserError()
 
     await db.delete(db_token)
     await db.commit()
@@ -140,5 +154,54 @@ async def logout(
         return False
 
     await db.delete(db_token)
+    await db.commit()
+    return True
+
+
+async def update_user_profile(
+    db: AsyncSession,
+    *,
+    user: User,
+    username: str | None = None,
+    email: str | None = None,
+) -> User:
+    """Update the current user's profile (self-edit)."""
+    if username is not None and username != user.username:
+        existing = await get_user_by_username(db, username=username)
+        if existing and existing.id != user.id:
+            raise ValueError("Username already taken")
+        user.username = username
+
+    if email is not None and email != user.email:
+        existing = await get_user_by_email(db, email=email)
+        if existing and existing.id != user.id:
+            raise ValueError("Email already registered")
+        user.email = email
+
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def change_password(
+    db: AsyncSession,
+    *,
+    user: User,
+    old_password: str,
+    new_password: str,
+) -> bool:
+    """Change password for local auth users. Returns True on success."""
+    if user.auth_provider != "local":
+        raise ValueError("password_change_not_available")
+
+    if user.hashed_password is None:
+        raise ValueError("password_not_set")
+
+    if not verify_password(old_password, user.hashed_password):
+        raise ValueError("password_incorrect")
+
+    user.hashed_password = hash_password(new_password)
+    db.add(user)
     await db.commit()
     return True

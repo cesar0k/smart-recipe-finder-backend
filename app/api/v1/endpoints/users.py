@@ -67,6 +67,13 @@ async def update_user(
             detail="Cannot modify your own account via this endpoint",
         )
 
+    # Admin accounts cannot be modified through the API
+    if db_user.role == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot modify admin account",
+        )
+
     updated = await user_service.update_user(
         db=db,
         db_user=db_user,
@@ -95,6 +102,13 @@ async def delete_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete your own account",
+        )
+
+    # Admin accounts cannot be deleted through the API
+    if db_user.role == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete admin account",
         )
 
     deleted = await user_service.delete_user(db=db, db_user=db_user)

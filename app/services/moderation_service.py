@@ -1,16 +1,24 @@
 from collections.abc import Sequence
 from typing import Any, cast
 
+from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 from app.core.vector_store import vector_store
 from app.models.recipe import Recipe
 from app.models.recipe_draft import RecipeDraft
+from app.services import moderation_log_service, notification_service
 
 
 async def get_pending_recipes(db: AsyncSession) -> Sequence[Recipe]:
-    query = select(Recipe).where(Recipe.status == "pending").order_by(Recipe.id.desc())
+    query = (
+        select(Recipe)
+        .where(Recipe.status == "pending")
+        .options(selectinload(Recipe.owner))
+        .order_by(Recipe.id.desc())
+    )
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -23,6 +31,22 @@ async def get_pending_drafts(db: AsyncSession) -> Sequence[RecipeDraft]:
     )
     result = await db.execute(query)
     return result.scalars().all()
+
+
+async def get_pending_counts(db: AsyncSession) -> dict[str, int]:
+    """Return counts of pending recipes and drafts."""
+    recipe_q = select(sa_func.count(Recipe.id)).where(Recipe.status == "pending")
+    draft_q = select(sa_func.count(RecipeDraft.id)).where(
+        RecipeDraft.status == "pending"
+    )
+
+    recipe_result = await db.execute(recipe_q)
+    draft_result = await db.execute(draft_q)
+
+    return {
+        "recipes": recipe_result.scalar_one(),
+        "drafts": draft_result.scalar_one(),
+    }
 
 
 def _create_semantic_document(recipe: Recipe) -> tuple[str, dict[str, Any]]:
@@ -65,6 +89,7 @@ async def moderate_recipe(
     *,
     recipe: Recipe,
     action: str,
+    moderator_id: int,
     rejection_reason: str | None = None,
 ) -> Recipe:
     if action == "approve":
@@ -88,6 +113,36 @@ async def moderate_recipe(
             pass
 
     db.add(recipe)
+
+    # Audit log (denormalized names for display)
+    from app.models.user import User as _User
+
+    mod_result = await db.execute(select(_User.username).where(_User.id == moderator_id))
+    mod_username = mod_result.scalar_one_or_none() or ""
+
+    await moderation_log_service.create_log(
+        db,
+        moderator_id=moderator_id,
+        recipe_id=recipe.id,
+        action=action,
+        reason=rejection_reason,
+        recipe_title=recipe.title,
+        moderator_username=mod_username,
+    )
+
+    # Notify recipe owner (keys, not hardcoded text — frontend translates)
+    _action_past = {"approve": "approved", "reject": "rejected"}
+    if recipe.owner_id is not None:
+        notif_type = f"recipe_{_action_past[action]}"
+        await notification_service.create_notification(
+            db,
+            user_id=recipe.owner_id,
+            type=notif_type,
+            title=recipe.title,
+            message=rejection_reason or "",
+            recipe_id=recipe.id,
+        )
+
     await db.commit()
     await db.refresh(recipe)
     return recipe
@@ -98,6 +153,7 @@ async def moderate_draft(
     *,
     draft: RecipeDraft,
     action: str,
+    moderator_id: int,
     rejection_reason: str | None = None,
 ) -> RecipeDraft:
     """Approve or reject a draft."""
@@ -121,7 +177,6 @@ async def moderate_draft(
         recipe.difficulty = draft.difficulty
         recipe.cuisine = draft.cuisine
         recipe.ingredients = draft.ingredients
-
         db.add(recipe)
 
         text, meta = _create_semantic_document(recipe)
@@ -131,19 +186,44 @@ async def moderate_draft(
             full_text=text,
             metadata=meta,
         )
-
-        await db.delete(draft)
-        await db.commit()
-
+        
         draft.status = "approved"
-        return draft
+        db.add(draft)
 
     elif action == "reject":
         draft.status = "rejected"
         draft.rejection_reason = rejection_reason
         db.add(draft)
-        await db.commit()
-        await db.refresh(draft)
-        return draft
 
+    # Audit log (denormalized names for display)
+    from app.models.user import User as _User
+
+    mod_result = await db.execute(select(_User.username).where(_User.id == moderator_id))
+    mod_username = mod_result.scalar_one_or_none() or ""
+
+    await moderation_log_service.create_log(
+        db,
+        moderator_id=moderator_id,
+        draft_id=draft.id,
+        recipe_id=draft.recipe_id,
+        action=action,
+        reason=rejection_reason,
+        recipe_title=draft.title,
+        moderator_username=mod_username,
+    )
+
+    # Notify draft author (keys, not hardcoded text — frontend translates)
+    _action_past_d = {"approve": "approved", "reject": "rejected"}
+    notif_type = f"draft_{_action_past_d[action]}"
+    await notification_service.create_notification(
+        db,
+        user_id=draft.author_id,
+        type=notif_type,
+        title=draft.title,
+        message=rejection_reason or "",
+        recipe_id=draft.recipe_id,
+    )
+
+    await db.commit()
+    await db.refresh(draft)
     return draft

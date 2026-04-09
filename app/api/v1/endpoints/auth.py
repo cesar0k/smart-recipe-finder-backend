@@ -9,6 +9,12 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.services import auth_service
+from app.services.auth_service import DeactivatedUserError
+from app.services.google_auth_service import (
+    GoogleAuthError,
+    authenticate_or_create_google_user,
+    exchange_code_for_user_info,
+)
 
 router = APIRouter()
 
@@ -85,9 +91,16 @@ async def refresh(
     db: Annotated[AsyncSession, Depends(get_db)],
     body: schemas.RefreshRequest,
 ) -> schemas.TokenPair:
-    result = await auth_service.refresh_tokens(
-        db, refresh_token_str=body.refresh_token
-    )
+    try:
+        result = await auth_service.refresh_tokens(
+            db, refresh_token_str=body.refresh_token
+        )
+    except DeactivatedUserError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated",
+        )
+
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -115,6 +128,45 @@ async def logout(
     return {"message": "Successfully logged out"}
 
 
+@router.post(
+    "/google",
+    response_model=schemas.TokenPair,
+    operation_id="google_auth",
+)
+async def google_auth(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    body: schemas.GoogleAuthCode,
+) -> schemas.TokenPair:
+    try:
+        google_user_info = await exchange_code_for_user_info(
+            code=body.code, redirect_uri=body.redirect_uri
+        )
+    except GoogleAuthError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+
+    user = await authenticate_or_create_google_user(
+        db, google_user_info=google_user_info
+    )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated",
+        )
+
+    access_token, refresh_token = await auth_service.create_token_pair(
+        db, user=user
+    )
+    return schemas.TokenPair(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
 @router.get(
     "/me",
     response_model=schemas.UserResponse,
@@ -124,3 +176,54 @@ async def me(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> schemas.UserResponse:
     return schemas.UserResponse.model_validate(current_user)
+
+
+@router.patch(
+    "/me",
+    response_model=schemas.UserResponse,
+    operation_id="update_current_user",
+)
+async def update_me(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    body: schemas.UserSelfUpdate,
+) -> schemas.UserResponse:
+    try:
+        updated = await auth_service.update_user_profile(
+            db,
+            user=current_user,
+            username=body.username,
+            email=body.email,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    return schemas.UserResponse.model_validate(updated)
+
+
+@router.post(
+    "/change-password",
+    operation_id="change_password",
+)
+async def change_password(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    body: schemas.PasswordChange,
+) -> dict[str, str]:
+    try:
+        await auth_service.change_password(
+            db,
+            user=current_user,
+            old_password=body.old_password,
+            new_password=body.new_password,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    return {"message": "Password changed successfully"}

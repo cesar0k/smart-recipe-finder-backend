@@ -41,7 +41,6 @@ async def create_new_recipe(
 async def read_recipes(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     include_ingredients: str | None = Query(
@@ -57,7 +56,42 @@ async def read_recipes(
         limit=limit,
         include_str=include_ingredients,
         exclude_str=exclude_ingredients,
-        current_user=current_user,
+    )
+    return [schemas.Recipe.model_validate(r) for r in recipes]
+
+
+@router.get("/my/", response_model=list[schemas.Recipe], operation_id="read_my_recipes")
+async def read_my_recipes(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+) -> list[schemas.Recipe]:
+    recipes = await recipe_service.get_user_recipes(
+        db=db, user_id=current_user.id, skip=skip, limit=limit,
+        include_pending_drafts=True,
+    )
+    return [schemas.Recipe.model_validate(r) for r in recipes]
+
+
+@router.get(
+    "/user/{user_id}",
+    response_model=list[schemas.Recipe],
+    operation_id="read_user_recipes",
+)
+async def read_user_recipes(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _mod: Annotated[User, Depends(get_current_user)],
+    user_id: int,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+) -> list[schemas.Recipe]:
+    if _mod.role not in ("moderator", "admin"):
+        raise HTTPException(status_code=403, detail="Moderator or admin access required")
+    recipes = await recipe_service.get_user_recipes(
+        db=db, user_id=user_id, skip=skip, limit=limit
     )
     return [schemas.Recipe.model_validate(r) for r in recipes]
 
@@ -91,11 +125,21 @@ async def search_recipes(
     "/{recipe_id}", response_model=schemas.Recipe, operation_id="read_recipe_by_id"
 )
 async def read_recipe_by_id(
-    *, db: Annotated[AsyncSession, Depends(get_db)], recipe_id: int
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    recipe_id: int,
 ) -> schemas.Recipe:
     recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
+
+    # Non-approved recipes are only visible to owner or moderator/admin
+    if recipe.status != "approved":
+        is_owner = current_user is not None and recipe.owner_id == current_user.id
+        is_mod = current_user is not None and current_user.role in ("moderator", "admin")
+        if not (is_owner or is_mod):
+            raise HTTPException(status_code=404, detail="Recipe not found")
 
     return schemas.Recipe.model_validate(recipe)
 
@@ -131,6 +175,37 @@ async def update_existing_recipe(
     return schemas.Recipe.model_validate(result)
 
 
+@router.post(
+    "/{recipe_id}/resubmit",
+    response_model=schemas.Recipe,
+    operation_id="resubmit_recipe",
+)
+async def resubmit_recipe(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    recipe_id: int,
+    recipe_in: schemas.RecipeUpdate,
+) -> schemas.Recipe:
+    """Re-submit a rejected recipe with corrections. Only the owner can resubmit."""
+    db_recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if not db_recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    if db_recipe.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the recipe owner can resubmit")
+
+    if db_recipe.status != "rejected":
+        raise HTTPException(
+            status_code=400, detail="Only rejected recipes can be resubmitted"
+        )
+
+    updated = await recipe_service.resubmit_recipe(
+        db=db, db_recipe=db_recipe, recipe_in=recipe_in
+    )
+    return schemas.Recipe.model_validate(updated)
+
+
 @router.delete(
     "/{recipe_id}", response_model=schemas.Recipe, operation_id="delete_recipe"
 )
@@ -146,7 +221,9 @@ async def delete_existing_recipe(
 
     _check_recipe_owner(db_recipe, current_user)
 
-    deleted_recipe = await recipe_service.delete_recipe(db=db, recipe_id=recipe_id)
+    deleted_recipe = await recipe_service.delete_recipe(
+        db=db, recipe_id=recipe_id, deleted_by=current_user
+    )
     if not deleted_recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 

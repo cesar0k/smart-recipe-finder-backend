@@ -31,7 +31,7 @@ class RootResponse(BaseModel):
     documentation_url: str
 
 
-app = FastAPI(title="Smart Recipes Finder", version="1.1.0", lifespan=lifespan)
+app = FastAPI(title="Smart Recipes Finder", version="2.0.0", lifespan=lifespan)
 
 
 app.add_middleware(

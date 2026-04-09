@@ -32,7 +32,7 @@ from app.core.security import hash_password
 from app.core.vector_store import VectorStore
 from app.models.recipe import Recipe
 from app.models.user import User
-from app.schemas.recipe_create import RecipeCreate
+from app.schemas import RecipeCreate
 from app.services import recipe_service
 from tests.testing_config import testing_settings
 

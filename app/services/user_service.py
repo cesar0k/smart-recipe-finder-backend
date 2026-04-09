@@ -1,8 +1,10 @@
 from collections.abc import Sequence
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.models.refresh_token import RefreshToken
 from app.models.user import User
 
 
@@ -43,6 +45,11 @@ async def update_user(
         db_user.role = role
     if is_active is not None:
         db_user.is_active = is_active
+
+        if is_active is False:
+            await db.execute(
+                sa_delete(RefreshToken).where(RefreshToken.user_id == db_user.id)
+            )
 
     db.add(db_user)
     await db.commit()
