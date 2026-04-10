@@ -153,7 +153,7 @@ async def create_recipe(
         mod_ids = [row[0] for row in mod_result.all()]
 
         if mod_ids:
-            await notification_service.create_notifications_bulk(
+            await notification_service.notify_bulk_and_broadcast(
                 db,
                 user_ids=mod_ids,
                 type="new_pending_recipe",
@@ -190,14 +190,14 @@ async def get_user_recipes(
     skip: int = 0,
     limit: int = 100,
     include_pending_drafts: bool = False,
+    approved_only: bool = False,
 ) -> Sequence[Recipe]:
-    """Current user's recipes — all statuses."""
+    """User's recipes. If approved_only=True, only return approved (for public view)."""
+    base = select(Recipe).where(Recipe.owner_id == user_id)
+    if approved_only:
+        base = base.where(Recipe.status == "approved")
     query = _with_owner(
-        select(Recipe)
-        .where(Recipe.owner_id == user_id)
-        .order_by(Recipe.id.desc())
-        .offset(skip)
-        .limit(limit)
+        base.order_by(Recipe.id.desc()).offset(skip).limit(limit)
     )
     result = await db.execute(query)
     recipes = result.scalars().all()
@@ -379,7 +379,7 @@ async def resubmit_recipe(
     mod_ids = [row[0] for row in mod_result.all()]
 
     if mod_ids:
-        await notification_service.create_notifications_bulk(
+        await notification_service.notify_bulk_and_broadcast(
             db,
             user_ids=mod_ids,
             type="new_pending_recipe",
@@ -414,7 +414,7 @@ async def delete_recipe(
         if is_mod_delete and owner_id is not None:
             from app.services import notification_service
 
-            await notification_service.create_notification(
+            await notification_service.notify_and_broadcast(
                 db,
                 user_id=owner_id,
                 type="recipe_deleted",

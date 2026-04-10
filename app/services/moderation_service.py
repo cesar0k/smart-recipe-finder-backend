@@ -134,7 +134,7 @@ async def moderate_recipe(
     _action_past = {"approve": "approved", "reject": "rejected"}
     if recipe.owner_id is not None:
         notif_type = f"recipe_{_action_past[action]}"
-        await notification_service.create_notification(
+        await notification_service.notify_and_broadcast(
             db,
             user_id=recipe.owner_id,
             type=notif_type,
@@ -215,7 +215,7 @@ async def moderate_draft(
     # Notify draft author (keys, not hardcoded text — frontend translates)
     _action_past_d = {"approve": "approved", "reject": "rejected"}
     notif_type = f"draft_{_action_past_d[action]}"
-    await notification_service.create_notification(
+    await notification_service.notify_and_broadcast(
         db,
         user_id=draft.author_id,
         type=notif_type,

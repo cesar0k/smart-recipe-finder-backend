@@ -83,15 +83,18 @@ async def read_my_recipes(
 async def read_user_recipes(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _mod: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
     user_id: int,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
 ) -> list[schemas.Recipe]:
-    if _mod.role not in ("moderator", "admin"):
-        raise HTTPException(status_code=403, detail="Moderator or admin access required")
+    """
+    View recipes of a specific user.
+    """
+    is_privileged = current_user is not None and current_user.role in ("moderator", "admin")
     recipes = await recipe_service.get_user_recipes(
-        db=db, user_id=user_id, skip=skip, limit=limit
+        db=db, user_id=user_id, skip=skip, limit=limit,
+        approved_only=not is_privileged,
     )
     return [schemas.Recipe.model_validate(r) for r in recipes]
 
