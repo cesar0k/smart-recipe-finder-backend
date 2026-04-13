@@ -23,6 +23,7 @@ async def register_user(
     *,
     email: str,
     username: str,
+    display_name: str | None = None,
     password: str,
 ) -> User:
     """Create a new user with hashed password.
@@ -40,6 +41,7 @@ async def register_user(
     user = User(
         email=email,
         username=username,
+        display_name=display_name,
         hashed_password=hash_password(password),
         role="user",
     )
@@ -163,9 +165,13 @@ async def update_user_profile(
     *,
     user: User,
     username: str | None = None,
+    display_name: str | None = None,
     email: str | None = None,
 ) -> User:
     """Update the current user's profile (self-edit)."""
+    if display_name is not None:
+        user.display_name = display_name
+
     if username is not None and username != user.username:
         existing = await get_user_by_username(db, username=username)
         if existing and existing.id != user.id:

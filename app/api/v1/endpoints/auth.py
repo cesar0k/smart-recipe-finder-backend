@@ -5,9 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
-from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.user import User
 from app.services import auth_service
 from app.services.auth_service import DeactivatedUserError
 from app.services.google_auth_service import (
@@ -35,6 +33,7 @@ async def register(
             db,
             email=user_in.email,
             username=user_in.username,
+            display_name=user_in.display_name,
             password=user_in.password,
         )
     except ValueError as e:
@@ -165,65 +164,3 @@ async def google_auth(
         access_token=access_token,
         refresh_token=refresh_token,
     )
-
-
-@router.get(
-    "/me",
-    response_model=schemas.UserResponse,
-    operation_id="get_current_user_info",
-)
-async def me(
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> schemas.UserResponse:
-    return schemas.UserResponse.model_validate(current_user)
-
-
-@router.patch(
-    "/me",
-    response_model=schemas.UserResponse,
-    operation_id="update_current_user",
-)
-async def update_me(
-    *,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-    body: schemas.UserSelfUpdate,
-) -> schemas.UserResponse:
-    try:
-        updated = await auth_service.update_user_profile(
-            db,
-            user=current_user,
-            username=body.username,
-            email=body.email,
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        )
-    return schemas.UserResponse.model_validate(updated)
-
-
-@router.post(
-    "/change-password",
-    operation_id="change_password",
-)
-async def change_password(
-    *,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-    body: schemas.PasswordChange,
-) -> dict[str, str]:
-    try:
-        await auth_service.change_password(
-            db,
-            user=current_user,
-            old_password=body.old_password,
-            new_password=body.new_password,
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
-    return {"message": "Password changed successfully"}
