@@ -18,6 +18,7 @@ class Recipe(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     instructions: Mapped[str] = mapped_column(String(50000), nullable=False)
     cooking_time_in_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     difficulty: Mapped[str] = mapped_column(String(50), nullable=False)

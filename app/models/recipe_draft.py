@@ -21,6 +21,7 @@ class RecipeDraft(Base):
     )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     instructions: Mapped[str] = mapped_column(String(50000), nullable=False)
     cooking_time_in_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     difficulty: Mapped[str] = mapped_column(String(50), nullable=False)
