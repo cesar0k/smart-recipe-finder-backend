@@ -12,6 +12,7 @@ from .recipe import (
 )
 from .user import (
     PasswordChange,
+    PublicUserResponse,
     UserCreate,
     UserLogin,
     UserResponse,
@@ -27,6 +28,7 @@ __all__ = [
     "NotificationResponse",
     "PasswordChange",
     "PendingCountResponse",
+    "PublicUserResponse",
     "Recipe",
     "RecipeBase",
     "RecipeCreate",

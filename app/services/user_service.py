@@ -1,9 +1,11 @@
 from collections.abc import Sequence
 
 from sqlalchemy import delete as sa_delete
+from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.models.recipe import Recipe
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 
@@ -61,3 +63,81 @@ async def delete_user(db: AsyncSession, *, db_user: User) -> User:
     await db.delete(db_user)
     await db.commit()
     return db_user
+
+
+async def search_users(
+    db: AsyncSession,
+    *,
+    query: str,
+    skip: int = 0,
+    limit: int = 20,
+) -> list[dict]:
+    """Search active users by username. Returns list of dicts with recipe_count."""
+    stmt = (
+        select(
+            User.id,
+            User.username,
+            User.display_name,
+            User.avatar_url,
+            User.role,
+            User.created_at,
+            sa_func.count(Recipe.id).label("recipe_count"),
+        )
+        .outerjoin(Recipe, (Recipe.owner_id == User.id) & (Recipe.status == "approved"))
+        .where(
+            User.is_active == True,  # noqa: E712
+            User.username.ilike(f"%{query}%"),
+        )
+        .group_by(User.id)
+        .order_by(User.username)
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return [
+        {
+            "id": row.id,
+            "username": row.username,
+            "display_name": row.display_name,
+            "avatar_url": row.avatar_url,
+            "role": row.role,
+            "created_at": row.created_at,
+            "recipe_count": row.recipe_count,
+        }
+        for row in result.all()
+    ]
+
+
+async def get_public_profile(
+    db: AsyncSession,
+    *,
+    user_id: int,
+) -> dict | None:
+    """Get public profile: user info + approved recipe count."""
+    stmt = (
+        select(
+            User.id,
+            User.username,
+            User.display_name,
+            User.avatar_url,
+            User.role,
+            User.created_at,
+            sa_func.count(Recipe.id).label("recipe_count"),
+        )
+        .outerjoin(Recipe, (Recipe.owner_id == User.id) & (Recipe.status == "approved"))
+        .where(User.id == user_id, User.is_active == True)  # noqa: E712
+        .group_by(User.id)
+    )
+    result = await db.execute(stmt)
+    row = result.one_or_none()
+    if row is None:
+        return None
+    return {
+        "id": row.id,
+        "username": row.username,
+        "display_name": row.display_name,
+        "avatar_url": row.avatar_url,
+        "role": row.role,
+        "created_at": row.created_at,
+        "recipe_count": row.recipe_count,
+    }
