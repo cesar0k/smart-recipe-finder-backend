@@ -269,8 +269,21 @@ async def _update_recipe_directly(
 
         db_recipe.image_urls = new_urls_list
 
+        # Sync thumbnail_urls: keep only thumbs for remaining images, in same order
+        current_thumbs = list(db_recipe.thumbnail_urls) if db_recipe.thumbnail_urls else []
+        old_url_list = list(db_recipe.image_urls) if db_recipe.image_urls else []
+        # Build a mapping from full URL → thumb URL using position
+        url_to_thumb = {}
+        for i, u in enumerate(old_url_list):
+            if i < len(current_thumbs):
+                url_to_thumb[u] = current_thumbs[i]
+        # Reorder thumbnails to match new image_urls order
+        new_thumbs = [url_to_thumb[u] for u in new_urls_list if u in url_to_thumb]
+        db_recipe.thumbnail_urls = new_thumbs
+
         for url in urls_to_delete:
             await s3_client.delete_image_from_s3(url)
+            await s3_client.delete_image_from_s3(_derive_thumb_url(url))
 
     if "ingredients" in update_data:
         raw_ingredients = update_data.pop("ingredients")
@@ -428,6 +441,17 @@ async def delete_recipe(
     return db_recipe
 
 
+def _derive_thumb_url(full_url: str) -> str:
+    """Derive the thumbnail URL from a full image URL (e.g. .webp → _thumb.webp)."""
+    if full_url.endswith(".webp"):
+        return full_url[:-5] + "_thumb.webp"
+    # Fallback: append _thumb before extension
+    dot_idx = full_url.rfind(".")
+    if dot_idx != -1:
+        return full_url[:dot_idx] + "_thumb" + full_url[dot_idx:]
+    return full_url + "_thumb"
+
+
 async def delete_recipe_images(
     db: AsyncSession, *, recipe_id: int, urls_to_delete: list[str]
 ) -> Recipe | None:
@@ -444,12 +468,21 @@ async def delete_recipe_images(
 
     remaining_urls = list(current_urls - urls_to_process)
     db_recipe.image_urls = remaining_urls
+
+    # Also remove corresponding thumbnails
+    current_thumbs = list(db_recipe.thumbnail_urls) if db_recipe.thumbnail_urls else []
+    thumb_urls_to_delete = {_derive_thumb_url(url) for url in urls_to_process}
+    remaining_thumbs = [t for t in current_thumbs if t not in thumb_urls_to_delete]
+    db_recipe.thumbnail_urls = remaining_thumbs
+
     db.add(db_recipe)
     await db.commit()
     await db.refresh(db_recipe)
 
+    # Delete from S3: full images + their thumbnails
     for url in urls_to_process:
         await s3_client.delete_image_from_s3(url)
+        await s3_client.delete_image_from_s3(_derive_thumb_url(url))
 
     return db_recipe
 

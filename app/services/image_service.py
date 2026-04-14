@@ -6,6 +6,11 @@ from PIL import Image, UnidentifiedImageError
 
 from app.core.config import settings
 
+FULL_MAX_WIDTH = 1200
+FULL_QUALITY = 85
+THUMB_MAX_WIDTH = 400
+THUMB_QUALITY = 60
+
 
 async def validate_and_process_image(file: UploadFile) -> BytesIO:
     await file.seek(0)
@@ -43,3 +48,31 @@ async def validate_and_process_image(file: UploadFile) -> BytesIO:
 
     except UnidentifiedImageError:
         raise HTTPException(status_code=400, detail="Invalid image file") from None
+
+
+def _resize_to_webp(content: bytes, max_width: int, quality: int) -> BytesIO:
+    """Resize image to max_width (preserving aspect ratio) and encode as WebP."""
+    img = Image.open(BytesIO(content))
+    img = img.convert("RGB")
+
+    if img.width > max_width:
+        ratio = max_width / img.width
+        new_size = (max_width, int(img.height * ratio))
+        img = img.resize(new_size, Image.LANCZOS)
+
+    buf = BytesIO()
+    img.save(buf, format="WEBP", quality=quality)
+    buf.seek(0)
+    return buf
+
+
+def generate_compressed_versions(content: bytes) -> dict[str, BytesIO]:
+    """
+    Generate two compressed WebP versions from the original image bytes:
+    - full: 1200px wide, quality 85
+    - thumb: 400px wide, quality 60
+    """
+    return {
+        "full": _resize_to_webp(content, FULL_MAX_WIDTH, FULL_QUALITY),
+        "thumb": _resize_to_webp(content, THUMB_MAX_WIDTH, THUMB_QUALITY),
+    }
