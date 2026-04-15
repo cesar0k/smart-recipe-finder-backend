@@ -37,6 +37,15 @@ async def create_new_recipe(
     return schemas.Recipe.model_validate(db_recipe)
 
 
+@router.get("/cuisines", response_model=list[str], operation_id="get_cuisines")
+async def get_cuisines(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[str]:
+    """Return distinct cuisine values from approved recipes."""
+    return await recipe_service.get_distinct_cuisines(db)
+
+
 @router.get("/", response_model=list[schemas.Recipe], operation_id="read_recipes")
 async def read_recipes(
     *,
@@ -44,11 +53,15 @@ async def read_recipes(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     include_ingredients: str | None = Query(
-        None, description="Comma-separated ingredient to include", max_length=500
+        None, description="Comma-separated ingredients to include", max_length=500
     ),
     exclude_ingredients: str | None = Query(
-        None, description="Comma-separated ingredient to exclude", max_length=500
+        None, description="Comma-separated ingredients to exclude", max_length=500
     ),
+    min_time: int | None = Query(None, ge=0, description="Min cooking time in minutes"),
+    max_time: int | None = Query(None, ge=0, description="Max cooking time in minutes"),
+    difficulty: str | None = Query(None, description="Comma-separated: easy,medium,hard"),
+    cuisine: str | None = Query(None, description="Comma-separated cuisine values"),
 ) -> list[schemas.Recipe]:
     recipes = await recipe_service.get_all_recipes(
         db=db,
@@ -56,6 +69,10 @@ async def read_recipes(
         limit=limit,
         include_str=include_ingredients,
         exclude_str=exclude_ingredients,
+        min_time=min_time,
+        max_time=max_time,
+        difficulty=difficulty,
+        cuisine=cuisine,
     )
     return [schemas.Recipe.model_validate(r) for r in recipes]
 
@@ -109,17 +126,25 @@ async def search_recipes(
         ..., description="Search query for recipes using vector search", max_length=200
     ),
     include_ingredients: str | None = Query(
-        None, description="Comma-separated ingredient to include", max_length=500
+        None, description="Comma-separated ingredients to include", max_length=500
     ),
     exclude_ingredients: str | None = Query(
-        None, description="Comma-separated ingredient to exclude", max_length=500
+        None, description="Comma-separated ingredients to exclude", max_length=500
     ),
+    min_time: int | None = Query(None, ge=0, description="Min cooking time in minutes"),
+    max_time: int | None = Query(None, ge=0, description="Max cooking time in minutes"),
+    difficulty: str | None = Query(None, description="Comma-separated: easy,medium,hard"),
+    cuisine: str | None = Query(None, description="Comma-separated cuisine values"),
 ) -> list[schemas.Recipe]:
     recipes = await recipe_service.search_recipes_by_vector(
         db=db,
         query_str=q,
         include_str=include_ingredients,
         exclude_str=exclude_ingredients,
+        min_time=min_time,
+        max_time=max_time,
+        difficulty=difficulty,
+        cuisine=cuisine,
     )
     return [schemas.Recipe.model_validate(r) for r in recipes]
 

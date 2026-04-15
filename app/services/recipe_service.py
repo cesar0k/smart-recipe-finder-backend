@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from typing import Any
 from typing import cast as t_cast
 
-from sqlalchemy import String, not_, or_
+from sqlalchemy import String, distinct, func, not_, or_
 from sqlalchemy import cast as sa_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -73,16 +73,21 @@ def _create_semantic_document(recipe: Recipe) -> tuple[str, dict[str, Any]]:
     return doc_to_embed, metadata
 
 
-def _apply_ingredient_filter(
+def _apply_filters(
     query: Select[tuple[Recipe]],
     include_str: str | None = None,
     exclude_str: str | None = None,
+    min_time: int | None = None,
+    max_time: int | None = None,
+    difficulty: str | None = None,
+    cuisine: str | None = None,
 ) -> Select[tuple[Recipe]]:
     """
-    Apply include/exclude filters to sqlalchemy object
+    Apply all filters: ingredients, cooking time, difficulty, cuisine.
     """
     json_as_text = sa_cast(Recipe.ingredients, String)
 
+    # Include ingredients
     if include_str:
         raw_items = [i.strip() for i in include_str.split(",") if i.strip()]
         for item in raw_items:
@@ -96,6 +101,7 @@ def _apply_ingredient_filter(
 
             query = query.where(or_(*term_conditions))
 
+    # Exclude ingredients
     if exclude_str:
         raw_items = [i.strip() for i in exclude_str.split(",") if i.strip()]
         exclude_conditions = []
@@ -109,7 +115,37 @@ def _apply_ingredient_filter(
         if exclude_conditions:
             query = query.where(not_(or_(*exclude_conditions)))
 
+    # Cooking time range
+    if min_time is not None:
+        query = query.where(Recipe.cooking_time_in_minutes >= min_time)
+    if max_time is not None:
+        query = query.where(Recipe.cooking_time_in_minutes <= max_time)
+
+    # Difficulty multi-select (comma-separated, case-insensitive)
+    if difficulty:
+        difficulties = [d.strip().lower() for d in difficulty.split(",") if d.strip()]
+        if difficulties:
+            query = query.where(func.lower(Recipe.difficulty).in_(difficulties))
+
+    # Cuisine multi-select (comma-separated, case-insensitive)
+    if cuisine:
+        cuisines = [c.strip().lower() for c in cuisine.split(",") if c.strip()]
+        if cuisines:
+            query = query.where(func.lower(Recipe.cuisine).in_(cuisines))
+
     return query
+
+
+async def get_distinct_cuisines(db: AsyncSession) -> list[str]:
+    """Return sorted list of distinct cuisine values from approved recipes."""
+    result = await db.execute(
+        select(distinct(Recipe.cuisine))
+        .where(Recipe.status == "approved")
+        .where(Recipe.cuisine.isnot(None))
+        .where(Recipe.cuisine != "")
+        .order_by(Recipe.cuisine)
+    )
+    return [row[0] for row in result.all()]
 
 
 async def create_recipe(
@@ -176,10 +212,18 @@ async def get_all_recipes(
     limit: int = 100,
     include_str: str | None = None,
     exclude_str: str | None = None,
+    min_time: int | None = None,
+    max_time: int | None = None,
+    difficulty: str | None = None,
+    cuisine: str | None = None,
 ) -> Sequence[Recipe]:
     """Public feed — only approved recipes. Always."""
     query = _with_owner(select(Recipe).where(Recipe.status == "approved"))
-    query = _apply_ingredient_filter(query, include_str, exclude_str)
+    query = _apply_filters(
+        query, include_str, exclude_str,
+        min_time=min_time, max_time=max_time,
+        difficulty=difficulty, cuisine=cuisine,
+    )
     query = query.order_by(Recipe.id.desc())
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
@@ -497,6 +541,10 @@ async def search_recipes_by_vector(
     query_str: str,
     include_str: str | None = None,
     exclude_str: str | None = None,
+    min_time: int | None = None,
+    max_time: int | None = None,
+    difficulty: str | None = None,
+    cuisine: str | None = None,
 ) -> list[Recipe]:
     recipe_ids = await vector_store.search(query=query_str, n_results=50)
 
@@ -511,7 +559,11 @@ async def search_recipes_by_vector(
         )
     )
 
-    query = _apply_ingredient_filter(query, include_str, exclude_str)
+    query = _apply_filters(
+        query, include_str, exclude_str,
+        min_time=min_time, max_time=max_time,
+        difficulty=difficulty, cuisine=cuisine,
+    )
 
     result = await db.execute(query)
     recipes = result.scalars().unique().all()
