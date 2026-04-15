@@ -51,8 +51,11 @@ def _create_semantic_document(recipe: Recipe) -> tuple[str, dict[str, Any]]:
         names = [item.get("name", "") for item in ingredients]
         ingredients_str = ", ".join(names)
 
+    description_str = f"Description: {recipe.description}. " if recipe.description else ""
+
     doc_to_embed = (
         f"Title: {recipe.title}. "
+        f"{description_str}"
         f"Ingredients: {ingredients_str}. "
         f"Instructions: {recipe.instructions}. "
         f"Cooking time: {t} minutes ({time_description}). "
@@ -308,6 +311,7 @@ async def _create_draft(
     # Start with current recipe data
     draft_data: dict[str, Any] = {
         "title": db_recipe.title,
+        "description": db_recipe.description,
         "instructions": db_recipe.instructions,
         "cooking_time_in_minutes": db_recipe.cooking_time_in_minutes,
         "difficulty": db_recipe.difficulty,

@@ -13,6 +13,7 @@ class RecipeDraftResponse(BaseModel):
     recipe_id: int
     author_id: int
     title: str
+    description: str | None = None
     instructions: str
     cooking_time_in_minutes: int
     difficulty: str

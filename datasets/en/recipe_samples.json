@@ -15,7 +15,8 @@
     "instructions": "1. Bring a large pot of salted water to a boil. Cook spaghetti according to package directions until al dente.\n2. While the pasta is cooking, cut the guanciale into small cubes. In a large pan, cook the guanciale over medium heat until it is crispy and the fat has rendered. Remove the guanciale from the pan and set aside, leaving the rendered fat in the pan.\n3. In a medium bowl, whisk together the eggs and grated Pecorino Romano cheese. Season with a generous amount of freshly ground black pepper.\n4. Once the pasta is cooked, drain it, reserving a cup of the pasta water.\n5. Add the hot pasta to the pan with the guanciale fat and toss to coat.\n6. Remove the pan from the heat and quickly pour in the egg and cheese mixture, stirring vigorously to create a creamy sauce. Be careful not to scramble the eggs. If the sauce is too thick, add a little of the reserved pasta water.\n7. Stir in the crispy guanciale.\n8. Serve immediately, with an extra sprinkle of Pecorino Romano and black pepper.",
     "cooking_time_in_minutes": 25,
     "difficulty": "medium",
-    "cuisine": "Italian"
+    "cuisine": "Italian",
+    "description": "A rich and creamy Italian classic made with guanciale, eggs, and Pecorino Romano. No cream needed — the silky sauce comes from perfectly emulsified eggs and cheese."
   },
   {
     "id": 2,
@@ -34,7 +35,8 @@
     "instructions": "1. Rinse the lentils thoroughly. In a medium saucepan, combine the lentils with water and bring to a boil. Reduce heat and simmer for 20-25 minutes, or until tender. Drain well.\n2. While the lentils are cooking, finely chop the onion and garlic.\n3. In a large bowl, mash the cooked lentils with a fork or potato masher until about half of them are broken down.\n4. Add the chopped onion, garlic, cumin, and flour to the bowl with the mashed lentils. Mix well to combine. Season with salt and pepper to taste.\n5. Divide the mixture into equal portions and form into patties.\n6. Heat a little oil in a large skillet over medium-high heat. Cook the patties for 3-5 minutes per side, until golden brown and firm.\n7. Serve the lentil burgers on buns with your favorite toppings.",
     "cooking_time_in_minutes": 40,
     "difficulty": "medium",
-    "cuisine": "American"
+    "cuisine": "American",
+    "description": "A hearty plant-based burger packed with protein from lentils. Seasoned with cumin and garlic, it holds together beautifully on the grill or in a pan."
   },
   {
     "id": 3,
@@ -52,7 +54,8 @@
     "instructions": "1. Place the chicken breast in a large pot with the chicken broth. Bring to a simmer over medium heat and cook for 15-20 minutes, or until the chicken is cooked through.\n2. While the chicken is cooking, chop the carrots and celery into small pieces.\n3. Remove the chicken from the pot and shred it with two forks.\n4. Return the shredded chicken to the pot. Add the chopped carrots and celery to the pot.\n5. Bring the soup back to a simmer and cook for 10-15 minutes, or until the vegetables are tender.\n6. Stir in the egg noodles and cook for another 5-7 minutes, or until the noodles are cooked through.\n7. Season with salt and pepper to taste.\n8. Serve hot, perfect for a cold day.",
     "cooking_time_in_minutes": 60,
     "difficulty": "easy",
-    "cuisine": "American"
+    "cuisine": "American",
+    "description": "The ultimate comfort food — tender chicken, soft egg noodles, and vegetables simmered in a warm, savory broth. Just like grandma used to make."
   },
   {
     "id": 4,
@@ -71,7 +74,8 @@
     "instructions": "1. Heat a little oil in a large pot or wok over medium-high heat. Add the green curry paste and cook for 1 minute, until fragrant.\n2. Stir in the coconut milk and bring to a simmer.\n3. Add the bamboo shoots and tofu to the pot. Reduce heat and simmer for 10-15 minutes, or until the vegetables are tender and the tofu has absorbed the flavors of the curry.\n4. Stir in the Thai basil and chili (if using).\n5. Serve the Thai green curry hot with jasmine rice.",
     "cooking_time_in_minutes": 35,
     "difficulty": "hard",
-    "cuisine": "Thai"
+    "cuisine": "Thai",
+    "description": "A fragrant and fiery Thai curry with coconut milk, bamboo shoots, and tofu. Thai basil and fresh chili bring an authentic Southeast Asian punch."
   },
   {
     "id": 5,
@@ -88,7 +92,8 @@
     "instructions": "1. Combine the whey protein, banana, milk, and peanut butter in a blender.\n2. Blend on high speed until all ingredients are well combined and the smoothie is smooth and creamy.\n3. If the smoothie is too thick, add a little more milk until it reaches your desired consistency.\n4. Pour into a glass and drink immediately after your workout for best results.",
     "cooking_time_in_minutes": 5,
     "difficulty": "easy",
-    "cuisine": "Modern"
+    "cuisine": "Modern",
+    "description": "A quick and nutritious shake perfect for muscle recovery. Blended with banana, peanut butter, and whey protein for a creamy, filling treat."
   },
   {
     "id": 6,
@@ -106,7 +111,8 @@
     "instructions": "1. Preheat oven to 375°F (190°C).\n2. Thinly slice the aubergine, zucchini, bell pepper, and tomato to a uniform thickness.\n3. In the bottom of a baking dish, spread a thin layer of tomato sauce (optional).\n4. Arrange the sliced vegetables in an alternating pattern over the sauce, creating a spiral or layered design.\n5. Drizzle the vegetables with olive oil and sprinkle with herbs de provence, salt, and pepper.\n6. Cover the dish with parchment paper or aluminum foil.\n7. Bake for 45-60 minutes, or until the vegetables are tender.\n8. Uncover and bake for another 10-15 minutes to allow the top to brown slightly.\n9. Let it rest for a few minutes before serving. A true French classic.",
     "cooking_time_in_minutes": 90,
     "difficulty": "medium",
-    "cuisine": "French"
+    "cuisine": "French",
+    "description": "A beautiful Provençal vegetable bake featuring layers of thinly sliced aubergine, zucchini, and tomato. Slow-roasted with herbs de Provence until tender."
   },
   {
     "id": 7,
@@ -124,7 +130,8 @@
     "instructions": "1. Cook the sushi rice according to package directions. Once cooked, season it with sushi vinegar, sugar, and salt. Let it cool to room temperature.\n2. Place a sheet of nori on a bamboo sushi mat, shiny side down.\n3. Wet your hands with water to prevent the rice from sticking. Spread a thin, even layer of sushi rice over the nori, leaving a small border at the top edge.\n4. Arrange thin strips of fresh salmon and cucumber in a line across the center of the rice.\n5. Optionally, spread a very small amount of wasabi along the fish.\n6. Using the bamboo mat, carefully start to roll the sushi from the bottom edge, tucking in the ingredients tightly.\n7. Roll it forward, applying gentle pressure to form a compact cylinder.\n8. Once rolled, use a sharp, wet knife to slice the roll into 6-8 equal pieces.\n9. Serve with soy sauce, wasabi, and pickled ginger.",
     "cooking_time_in_minutes": 50,
     "difficulty": "hard",
-    "cuisine": "Japanese"
+    "cuisine": "Japanese",
+    "description": "Hand-rolled sushi with fresh salmon, cucumber, and perfectly seasoned rice wrapped in crispy nori. A rewarding challenge for any home cook."
   },
   {
     "id": 8,
@@ -142,7 +149,8 @@
     "instructions": "1. Create a rub by combining salt, black pepper, and paprika.\n2. Generously season the entire beef brisket with the spice rub, covering all sides.\n3. Preheat your smoker to a low and consistent temperature, around 225-250°F (107-121°C).\n4. Place the brisket in the smoker, fat side up.\n5. Smoke the brisket \"low and slow\" for approximately 10-12 hours, or until the internal temperature reaches around 200°F (93°C) and the meat is tender.\n6. During the last hour of smoking, you can optionally baste the brisket with your favorite BBQ sauce.\n7. Once cooked, remove the brisket from the smoker and let it rest for at least 30 minutes before slicing. This allows the juices to redistribute.\n8. Slice the brisket against the grain and serve.",
     "cooking_time_in_minutes": 720,
     "difficulty": "hard",
-    "cuisine": "American"
+    "cuisine": "American",
+    "description": "Low-and-slow smoked beef brisket with a simple salt-and-pepper rub. Hours of patient smoking yield impossibly tender, deeply flavored meat."
   },
   {
     "id": 9,
@@ -160,7 +168,8 @@
     "instructions": "1. Slice the ripe tomatoes and fresh mozzarella into uniform, thick slices.\n2. On a serving platter, arrange the tomato and mozzarella slices in an alternating pattern.\n3. Tuck fresh basil leaves in between the slices.\n4. Drizzle generously with high-quality extra virgin olive oil.\n5. Finish with a drizzle of balsamic glaze over the top.\n6. Season with a pinch of salt and freshly ground black pepper.\n7. Serve immediately for the best flavor.",
     "cooking_time_in_minutes": 10,
     "difficulty": "easy",
-    "cuisine": "Italian"
+    "cuisine": "Italian",
+    "description": "A vibrant Italian salad of ripe tomatoes, fresh mozzarella, and basil, finished with olive oil and balsamic glaze. Simple ingredients, stunning result."
   },
   {
     "id": 10,
@@ -178,7 +187,8 @@
     "instructions": "1. Preheat your oven to 400°F (200°C). Grease and flour two small ramekins.\n2. In a small, microwave-safe bowl, melt the dark chocolate and butter together in 30-second intervals, stirring until smooth.\n3. In a separate medium bowl, whisk together the eggs and sugar until pale and slightly thickened.\n4. Gently fold the melted chocolate mixture into the egg and sugar mixture.\n5. Stir in the flour until just combined. Do not overmix.\n6. Pour the batter evenly into the prepared ramekins.\n7. Bake for 12-14 minutes. The edges should be firm, but the center will still be soft and wiggly.\n8. Let the cakes cool in the ramekins for a minute, then carefully run a knife around the edge and invert them onto serving plates.\n9. Serve immediately, perhaps with a dusting of powdered sugar or a scoop of vanilla ice cream.",
     "cooking_time_in_minutes": 20,
     "difficulty": "hard",
-    "cuisine": "French"
+    "cuisine": "French",
+    "description": "An indulgent French dessert with a crisp exterior and a warm, molten chocolate center. Best served immediately with vanilla ice cream."
   },
   {
     "id": 11,
@@ -196,7 +206,8 @@
     "instructions": "1. Halve the avocados, remove the pits, and scoop the flesh into a medium bowl.\n2. Mash the avocados with a fork to your desired consistency – chunky or smooth.\n3. Finely chop the onion and cilantro. Mince the jalapeno (remove seeds for less heat).\n4. Add the chopped onion, cilantro, and jalapeno to the mashed avocado.\n5. Squeeze in the fresh lime juice. This not only adds flavor but also prevents the avocado from browning too quickly.\n6. Stir everything together until well combined.\n7. Season with salt to taste.\n8. Serve immediately with tortilla chips for dipping.",
     "cooking_time_in_minutes": 10,
     "difficulty": "easy",
-    "cuisine": "Mexican"
+    "cuisine": "Mexican",
+    "description": "A zesty Mexican dip of ripe avocados, fresh lime, cilantro, and a kick of jalapeño. Perfect with tortilla chips for sharing."
   },
   {
     "id": 12,
@@ -213,7 +224,8 @@
     "instructions": "1. Bring the water (or milk for a creamier texture) to a boil in a small saucepan.\n2. Stir in the oats and reduce the heat to a simmer.\n3. Cook for about 5 minutes, stirring occasionally, until the oats are tender and have absorbed most of the liquid.\n4. Remove from heat and pour into a bowl.\n5. Drizzle with honey to your liking.\n6. Sprinkle with a pinch of cinnamon for extra flavor.\n7. Serve warm.",
     "cooking_time_in_minutes": 10,
     "difficulty": "easy",
-    "cuisine": "British"
+    "cuisine": "British",
+    "description": "A warm and wholesome breakfast of creamy oats drizzled with honey and a hint of cinnamon. Ready in minutes, satisfying for hours."
   },
   {
     "id": 13,
@@ -231,7 +243,8 @@
     "instructions": "1. Peel the potatoes and cut them into thick-cut fries. Rinse them in cold water and pat them dry.\n2. In a large bowl, whisk together the flour, a pinch of salt, and beer to create a smooth batter. It should have the consistency of thick pancake batter.\n3. Heat a large, deep pot with oil to 350°F (175°C).\n4. Pat the cod fillets dry and season with salt and pepper. Dip each fillet into the beer batter, ensuring it's fully coated.\n5. Carefully place the battered fish into the hot oil and fry for 5-8 minutes, or until golden brown and cooked through. Remove and drain on a wire rack.\n6. Fry the potatoes in the same oil in batches for 6-8 minutes, until they are golden and crispy.\n7. Serve the fish and chips hot with a side of tartar sauce and a lemon wedge.",
     "cooking_time_in_minutes": 40,
     "difficulty": "medium",
-    "cuisine": "British"
+    "cuisine": "British",
+    "description": "A British pub classic — crispy beer-battered cod served alongside thick-cut golden fries. Best enjoyed with tartar sauce and a squeeze of lemon."
   },
   {
     "id": 14,
@@ -249,7 +262,8 @@
     "instructions": "1. Finely chop the onion. Clean and slice the mushrooms.\n2. In a large saucepan or pot, sauté the onions in a little olive oil or butter until they become soft and translucent.\n3. Add the sliced mushrooms and cook until they have released their liquid and started to brown.\n4. Add the arborio rice to the pot and toast it for a minute, stirring constantly, until the edges of the rice look translucent.\n5. Pour in the white wine and cook, stirring, until it has been completely absorbed by the rice.\n6. Begin adding the warm broth one ladleful at a time, stirring continuously. Wait until each addition of broth is almost fully absorbed before adding the next.\n7. Continue this process for 20-25 minutes, until the rice is creamy and al dente.\n8. Remove from heat and stir in the grated parmesan cheese. Season with salt and pepper to taste. Serve immediately.",
     "cooking_time_in_minutes": 45,
     "difficulty": "hard",
-    "cuisine": "Italian"
+    "cuisine": "Italian",
+    "description": "A luxurious Italian rice dish cooked slowly with mushrooms, white wine, and Parmesan. Each ladle of broth brings it closer to creamy perfection."
   },
   {
     "id": 15,
@@ -267,7 +281,8 @@
     "instructions": "1. In a small saucepan, create a simple syrup by heating the sugar and one cup of water. Stir until the sugar is completely dissolved. Let it cool.\n2. Squeeze the lemons to get fresh lemon juice. Remove any seeds.\n3. In a large pitcher, combine the cooled simple syrup, the fresh lemon juice, and the remaining cold water.\n4. Stir well to combine.\n5. Fill serving glasses with plenty of ice.\n6. Pour the lemonade over the ice.\n7. Garnish with fresh mint leaves and a lemon slice.",
     "cooking_time_in_minutes": 10,
     "difficulty": "easy",
-    "cuisine": "International"
+    "cuisine": "International",
+    "description": "A refreshing homemade lemonade sweetened with simple syrup and garnished with fresh mint. The perfect thirst-quencher on a hot day."
   },
   {
     "id": 16,
@@ -285,7 +300,8 @@
     "instructions": "1. In a large bowl, whisk together the flour, sugar (if using), baking powder, and salt.\n2. In a separate medium bowl, whisk the eggs and milk together.\n3. Pour the wet ingredients into the dry ingredients and mix with a whisk until just combined. A few small lumps are okay; do not overmix.\n4. Heat a non-stick griddle or frying pan over medium heat and lightly grease it with butter or oil.\n5. Pour about 1/4 cup of batter onto the hot griddle for each pancake.\n6. Cook for 2-3 minutes per side, or until bubbles appear on the surface and the underside is golden brown. Flip and cook the other side until golden.\n7. Stack the fluffy pancakes on a plate and serve warm with a generous pour of maple syrup and a pat of butter.",
     "cooking_time_in_minutes": 20,
     "difficulty": "easy",
-    "cuisine": "American"
+    "cuisine": "American",
+    "description": "Light, fluffy American pancakes stacked high and drenched in maple syrup. A weekend breakfast tradition that never gets old."
   },
   {
     "id": 17,
@@ -303,7 +319,8 @@
     "instructions": "1. Wash and chop the romaine lettuce into bite-sized pieces. Dry it thoroughly.\n2. If using, grill a chicken breast until cooked through, then slice it into strips.\n3. In a large salad bowl, add the chopped romaine lettuce.\n4. Pour the Caesar dressing over the lettuce and toss gently to coat all the leaves evenly.\n5. Add the crunchy croutons and grated/shaved Parmesan cheese. Toss again lightly.\n6. Top the salad with the grilled chicken strips.\n7. Serve immediately, with extra Parmesan cheese on the side if desired.",
     "cooking_time_in_minutes": 15,
     "difficulty": "easy",
-    "cuisine": "International"
+    "cuisine": "International",
+    "description": "Crisp romaine lettuce tossed with creamy Caesar dressing, crunchy croutons, shaved Parmesan, and grilled chicken. A satisfying salad that works as a full meal."
   },
   {
     "id": 18,
@@ -321,7 +338,8 @@
     "instructions": "1. Season the beef tenderloin with salt and pepper. Sear it in a hot, oiled pan on all sides until well browned. Remove from the pan and let it cool. Once cool, brush it all over with mustard.\n2. Finely chop the mushrooms and cook them in a dry pan until all the moisture has evaporated. This is the duxelles. Let it cool.\n3. Lay out slices of prosciutto on a sheet of plastic wrap, overlapping them to form a rectangle. Spread the cooled mushroom duxelles over the prosciutto.\n4. Place the seared beef tenderloin at one end and roll it up tightly using the plastic wrap to create a neat log. Chill in the refrigerator for at least 30 minutes.\n5. Roll out the puff pastry on a lightly floured surface. Unwrap the beef log and place it in the middle of the pastry.\n6. Fold the pastry around the beef, trimming any excess. Crimp the edges to seal tightly. You can decorate the top with pastry scraps if you like.\n7. Brush the entire pastry with an egg wash.\n8. Bake at 400°F (200°C) for 20-25 minutes, or until the pastry is golden brown and the beef reaches your desired doneness (around 130°F for medium-rare).\n9. Let it rest for 10 minutes before slicing and serving.",
     "cooking_time_in_minutes": 120,
     "difficulty": "hard",
-    "cuisine": "British"
+    "cuisine": "British",
+    "description": "An impressive British showstopper — beef tenderloin wrapped in mushroom duxelles and prosciutto, all encased in golden puff pastry."
   },
   {
     "id": 19,
@@ -339,7 +357,8 @@
     "instructions": "1. Press the tofu for at least 30 minutes to remove excess water. This will help it get crispy. Cut it into cubes.\n2. Chop the bell pepper and broccoli into bite-sized pieces. Mince the ginger.\n3. In a small bowl, mix the soy sauce with a little water, and cornstarch (optional, for thickening).\n4. Heat oil in a large skillet or wok over medium-high heat. Add the tofu and cook until golden brown on all sides. Remove the tofu from the pan.\n5. Add a little more oil to the pan and stir-fry the broccoli and bell peppers with the minced ginger for 3-5 minutes, until tender-crisp.\n6. Return the crispy tofu to the pan.\n7. Pour the soy sauce mixture over everything and toss to coat. Cook for another minute until the sauce has slightly thickened.\n8. Serve hot, on its own or with a side of rice.",
     "cooking_time_in_minutes": 25,
     "difficulty": "easy",
-    "cuisine": "Asian"
+    "cuisine": "Asian",
+    "description": "A quick and colorful stir-fry with crispy tofu, broccoli, and bell peppers in a savory soy-ginger sauce. Healthy, satisfying, and ready in 25 minutes."
   },
   {
     "id": 20,
@@ -357,7 +376,8 @@
     "instructions": "1. Wash all the fruits thoroughly.\n2. Core the apple and chop it into small, bite-sized cubes.\n3. Peel the banana and slice it into rounds.\n4. Remove the grapes from their stems. You can leave them whole or slice them in half.\n5. Peel the orange and separate it into segments, then chop the segments into smaller pieces.\n6. Combine all the chopped fruits in a large bowl.\n7. Gently mix everything together.\n8. For a creamy texture, you can serve the fruit salad with a dollop of yogurt on top. For a fresh touch, garnish with a few mint leaves. Serve chilled.",
     "cooking_time_in_minutes": 10,
     "difficulty": "easy",
-    "cuisine": "International"
+    "cuisine": "International",
+    "description": "A simple mix of fresh seasonal fruits served with a dollop of yogurt. Light, refreshing, and naturally sweet — the easiest healthy dessert."
   },
   {
     "id": 21,
@@ -375,7 +395,8 @@
     "instructions": "1. Preheat your oven to 375°F (190°C).\n2. Peel and thinly slice the potatoes to a uniform thickness. A mandoline slicer works best for this.\n3. Rub a baking dish with a halved garlic clove.\n4. Arrange a layer of sliced potatoes in the bottom of the dish, overlapping them slightly.\n5. Season the layer with salt, pepper, and a pinch of nutmeg. Sprinkle with some of the grated cheese.\n6. Pour a small amount of cream over the layer.\n7. Repeat the layering process until all potatoes are used, ending with a final layer of cheese on top.\n8. Pour the remaining cream over the top.\n9. Bake for 50-60 minutes, or until the potatoes are tender (test with a knife) and the top is golden brown and bubbly. Let it rest for a few minutes before serving.",
     "cooking_time_in_minutes": 60,
     "difficulty": "medium",
-    "cuisine": "French"
+    "cuisine": "French",
+    "description": "Thinly sliced potatoes baked in layers with cream, garlic, and melted cheese until golden and bubbling. Rich, comforting, and impossible to resist."
   },
   {
     "id": 22,
@@ -393,7 +414,8 @@
     "instructions": "1. Roughly chop the cucumber and tomatoes into large, rustic chunks.\n2. Slice the red onion thinly.\n3. In a large salad bowl, combine the chopped cucumber, tomatoes, and sliced red onion.\n4. Add the Kalamata olives to the bowl.\n5. Place a whole slab or large cubes of feta cheese on top of the vegetables.\n6. Drizzle generously with extra virgin olive oil.\n7. Sprinkle with dried oregano.\n8. Toss gently right before serving, or serve as is, allowing people to break up the feta themselves.",
     "cooking_time_in_minutes": 15,
     "difficulty": "easy",
-    "cuisine": "Greek"
+    "cuisine": "Greek",
+    "description": "A classic Mediterranean salad with chunky tomatoes, cucumber, olives, and a generous slab of feta. Dressed simply with olive oil and oregano."
   },
   {
     "id": 23,
@@ -411,7 +433,8 @@
     "instructions": "1. Cut the chicken thighs into bite-sized pieces. In a bowl, marinate the chicken with yogurt, garam masala, cumin, and a little salt for at least 30 minutes.\n2. Preheat your grill or a broiler. Thread the marinated chicken onto skewers.\n3. Grill the chicken for 10-15 minutes, turning occasionally, until it's cooked through and slightly charred.\n4. To make the sauce, sauté chopped onions and garlic in a pan. Add the tomato puree and spices, and cook for a few minutes.\n5. Stir in cream or coconut milk to create a rich, creamy sauce.\n6. Add the grilled chicken pieces to the sauce.\n7. Simmer for at least 10 minutes to allow the flavors to meld together.\n8. Serve hot with naan bread or rice.",
     "cooking_time_in_minutes": 45,
     "difficulty": "medium",
-    "cuisine": "Indian"
+    "cuisine": "Indian",
+    "description": "Tender chicken pieces marinated in spiced yogurt, grilled until charred, then simmered in a rich, creamy tomato sauce. A beloved Indian-British classic."
   },
   {
     "id": 24,
@@ -429,7 +452,8 @@
     "instructions": "1. Preheat your oven to 400°F (200°C). Cut the pumpkin in half, remove the seeds, and roast it flesh-side down on a baking sheet for 30-40 minutes, until tender.\n2. While the pumpkin is roasting, sauté a chopped onion and minced garlic in a large pot until softened.\n3. Once the pumpkin is cooked, scoop the flesh out of the skin and add it to the pot with the onions and garlic.\n4. Pour in the vegetable broth, ensuring the pumpkin is covered.\n5. Bring the mixture to a simmer, then reduce the heat and let it cook for about 10 minutes.\n6. Use an immersion blender to blend the soup until it's completely smooth. Alternatively, carefully transfer it in batches to a regular blender.\n7. Stir in the heavy cream and warm it through gently. Do not let it boil.\n8. Season with salt and pepper to taste. Serve warm, perhaps with a swirl of cream on top.",
     "cooking_time_in_minutes": 40,
     "difficulty": "medium",
-    "cuisine": "International"
+    "cuisine": "International",
+    "description": "A velvety smooth soup made from roasted pumpkin, finished with a swirl of cream. Warming, comforting, and perfect for autumn evenings."
   },
   {
     "id": 25,
@@ -447,7 +471,8 @@
     "instructions": "1. Cook the penne pasta according to package directions until al dente.\n2. While the pasta is cooking, make the pesto. In a food processor, combine the fresh basil leaves, pine nuts, and grated Parmesan cheese.\n3. Pulse the mixture a few times to roughly chop the ingredients.\n4. With the food processor running, slowly stream in the olive oil until the pesto is smooth and well combined. Season with salt and pepper.\n5. Drain the cooked pasta, reserving a small amount of the pasta water.\n6. In a large bowl, toss the hot pasta with the freshly made pesto.\n7. If the sauce is too thick, add a little of the reserved pasta water to reach your desired consistency.\n8. Serve immediately, with extra Parmesan cheese for sprinkling on top.",
     "cooking_time_in_minutes": 15,
     "difficulty": "easy",
-    "cuisine": "Italian"
+    "cuisine": "Italian",
+    "description": "Penne tossed in a vibrant homemade basil pesto with pine nuts and Parmesan. Fresh, aromatic, and ready faster than delivery."
   },
   {
     "id": 26,
@@ -465,7 +490,8 @@
     "instructions": "1. Preheat your oven to its highest temperature, typically 500-550°F (260-290°C), with a pizza stone or baking steel inside if you have one.\n2. On a lightly floured surface, stretch the pizza dough into your desired shape and thickness.\n3. Transfer the stretched dough to a piece of parchment paper or a pizza peel.\n4. Spread a thin layer of tomato sauce evenly over the dough, leaving a small border for the crust.\n5. Tear or slice the fresh mozzarella and distribute it over the sauce.\n6. Drizzle a little olive oil over the top.\n7. Carefully transfer the pizza to the hot oven (onto the preheated stone/steel if using).\n8. Bake for 7-10 minutes, or until the crust is golden brown and the cheese is bubbly and slightly browned.\n9. Remove the pizza from the oven and top it with fresh basil leaves before serving.",
     "cooking_time_in_minutes": 30,
     "difficulty": "medium",
-    "cuisine": "Italian"
+    "cuisine": "Italian",
+    "description": "The quintessential Neapolitan pizza — a thin, charred crust topped with tomato sauce, fresh mozzarella, and fragrant basil leaves."
   },
   {
     "id": 27,
@@ -483,7 +509,8 @@
     "instructions": "1. The day before, make sure the bowl of your ice cream maker is completely frozen according to the manufacturer's instructions.\n2. In a medium bowl, whisk together the sugar and salt until combined.\n3. Pour in the heavy cream and whole milk.\n4. If using a vanilla bean, split it lengthwise, scrape out the seeds, and add them to the mixture. If using vanilla extract, add it now.\n5. Whisk the mixture until the sugar is completely dissolved.\n6. Assemble your ice cream maker and turn it on. Pour the chilled mixture into the frozen bowl.\n7. Churn for 20-25 minutes, or until the ice cream has thickened to a soft-serve consistency.\n8. Transfer the ice cream to an airtight, freezer-safe container. Freeze for at least 2-3 hours to allow it to harden.",
     "cooking_time_in_minutes": 40,
     "difficulty": "hard",
-    "cuisine": "International"
+    "cuisine": "International",
+    "description": "Smooth, rich vanilla ice cream made from scratch with real vanilla bean. Churned to creamy perfection, it is worth every minute of the wait."
   },
   {
     "id": 28,
@@ -501,7 +528,8 @@
     "instructions": "1. Rinse the sticky rice until the water runs clear, then soak it in water for at least 4 hours, or overnight.\n2. Drain the rice and steam it for 20-25 minutes, until it is tender and cooked through.\n3. While the rice is steaming, prepare the coconut sauce. In a small saucepan, heat the coconut milk, sugar, and a pinch of salt. Stir until the sugar is dissolved. Do not boil.\n4. Once the rice is cooked, transfer it to a bowl and pour about half of the warm coconut sauce over it. Stir gently and let it sit for 20 minutes for the rice to absorb the sauce.\n5. Peel a ripe mango and slice it thinly.\n6. To serve, place a portion of the sticky rice on a plate.\n7. Arrange the fresh mango slices alongside the rice.\n8. Drizzle with a little of the remaining coconut sauce and sprinkle with toasted sesame seeds.",
     "cooking_time_in_minutes": 30,
     "difficulty": "medium",
-    "cuisine": "Thai"
+    "cuisine": "Thai",
+    "description": "A beloved Thai dessert of warm coconut-infused sticky rice paired with sweet, ripe mango slices. Topped with toasted sesame seeds."
   },
   {
     "id": 29,
@@ -519,7 +547,8 @@
     "instructions": "1. Preheat your oven to 400°F (200°C).\n2. Peel the potatoes, cut them into chunks, and boil them in salted water until tender. Drain, then mash them with butter and a little milk until smooth.\n3. While the potatoes are boiling, cook the lamb mince in a large skillet over medium-high heat until browned. Drain off any excess fat.\n4. Add chopped onions, carrots, and peas to the skillet with the meat. Cook until the vegetables are softened.\n5. Stir in some flour, then add beef or lamb broth and seasonings (like thyme or rosemary). Simmer until the sauce has thickened.\n6. Spread the meat and vegetable mixture in the bottom of a baking dish.\n7. Top the meat mixture with the mashed potatoes, spreading it evenly and creating a textured surface with a fork if you like.\n8. Bake for 20-25 minutes, or until the potato topping is golden brown and the filling is bubbly. Let it cool for a few minutes before serving.",
     "cooking_time_in_minutes": 50,
     "difficulty": "medium",
-    "cuisine": "British"
+    "cuisine": "British",
+    "description": "A hearty British comfort classic — savory lamb and vegetables in rich gravy, topped with a golden layer of creamy mashed potatoes."
   },
   {
     "id": 30,
@@ -537,7 +566,8 @@
     "instructions": "1. Peel and devein the shrimp. Pat them dry with a paper towel.\n2. Mince the garlic and chop the parsley.\n3. In a large skillet, melt the butter over medium-high heat.\n4. Add the minced garlic and cook for about 30 seconds, until fragrant.\n5. Add the shrimp to the skillet in a single layer. Cook for 1-2 minutes per side, until they turn pink and opaque. Do not overcook.\n6. Remove the skillet from the heat.\n7. Squeeze in the juice of half a lemon and stir in the chopped parsley.\n8. Season with salt and pepper to taste. Serve immediately, perhaps with some crusty bread to soak up the garlic butter.",
     "cooking_time_in_minutes": 10,
     "difficulty": "easy",
-    "cuisine": "International"
+    "cuisine": "International",
+    "description": "Juicy shrimp sautéed in sizzling garlic butter with a squeeze of lemon and fresh parsley. Ready in 10 minutes, elegant enough for any table."
   },
   {
     "id": 31,
@@ -554,7 +584,8 @@
     "instructions": "1. Fill a highball or a large wine glass (Copa de Balon) completely with large ice cubes.\n2. Pour your desired amount of gin (typically 1.5 - 2 ounces) over the ice.\n3. Cut a fresh lime into wedges. Squeeze one wedge over the gin.\n4. Top up the glass with chilled tonic water, pouring it slowly to preserve the carbonation.\n5. Garnish with another fresh lime wedge or wheel.\n6. Give it a very gentle stir to combine.\n7. Enjoy immediately.",
     "cooking_time_in_minutes": 5,
     "difficulty": "easy",
-    "cuisine": "British"
+    "cuisine": "British",
+    "description": "A perfectly balanced cocktail of quality gin and chilled tonic water over ice, with a fresh lime wedge. Crisp, refreshing, and effortlessly elegant."
   },
   {
     "id": 32,
@@ -571,7 +602,8 @@
     "instructions": "1. Preheat oven to 400°F (200°C). Carefully cut the butternut squash in half, scoop out the seeds, and place it cut-side down on a baking sheet. Roast for 30-40 minutes until tender.\n2. While it roasts, sauté a chopped onion in a large pot with a little butter or oil until soft.\n3. Once the squash is cooked, let it cool slightly, then scoop the flesh into the pot with the onions.\n4. Add the vegetable broth, ensuring the squash is covered.\n5. Bring to a simmer and cook for 10 minutes.\n6. Use an immersion blender to blend the soup until smooth. Alternatively, blend in batches in a regular blender.\n7. Stir in the cream and gently heat through.\n8. Season with salt, pepper, and perhaps a pinch of nutmeg. Serve warm.",
     "cooking_time_in_minutes": 45,
     "difficulty": "medium",
-    "cuisine": "International"
+    "cuisine": "International",
+    "description": "A silky, golden soup made from roasted butternut squash and a touch of cream. Sweet, savory, and warming — a fall favorite."
   },
   {
     "id": 33,
@@ -589,7 +621,8 @@
     "instructions": "1. Prepare your desired ramen broth according to package directions or your own recipe. Add any spicy elements like chili oil or paste.\n2. Cook the ramen noodles separately in a pot of boiling water according to package instructions.\n3. While the noodles cook, prepare your toppings. Slice the cooked pork, soft-boil an egg and halve it, and thinly slice the green onions.\n4. Drain the cooked noodles well.\n5. Place the hot noodles in a large serving bowl.\n6. Pour the hot, spicy broth over the noodles.\n7. Arrange the pork slices, soft-boiled egg, and green onions on top.\n8. A drizzle of soy sauce or sesame oil can be added for extra flavor. Serve immediately.",
     "cooking_time_in_minutes": 30,
     "difficulty": "medium",
-    "cuisine": "Japanese"
+    "cuisine": "Japanese",
+    "description": "A steaming bowl of spicy Japanese ramen with rich broth, chewy noodles, sliced pork, and a perfectly soft-boiled egg."
   },
   {
     "id": 34,
@@ -606,7 +639,8 @@
     "instructions": "1. Take the beef steak out of the refrigerator at least 30 minutes before grilling to allow it to come to room temperature.\n2. Pat the steak dry with a paper towel.\n3. Season both sides of the steak generously with coarse salt and freshly ground black pepper.\n4. Optionally, press a sprig of rosemary onto each side of the steak.\n5. Preheat your grill to high heat.\n6. Place the steak on the hot grill. Cook for 4-5 minutes per side for a medium-rare result, depending on the thickness of the steak.\n7. Remove the steak from the grill and transfer it to a cutting board.\n8. Crucially, let the steak rest for at least 5-10 minutes before slicing. This allows the juices to redistribute, resulting in a more tender and flavorful steak.\n9. Slice the steak against the grain and serve.",
     "cooking_time_in_minutes": 20,
     "difficulty": "medium",
-    "cuisine": "American"
+    "cuisine": "American",
+    "description": "A thick-cut beef steak seasoned simply with salt, pepper, and rosemary, grilled to your perfect doneness. Let it rest, then slice against the grain."
   },
   {
     "id": 35,
@@ -624,6 +658,7 @@
     "instructions": "1. Preheat your oven to 350°F (175°C). Grease and flour a cake pan.\n2. In a large bowl, whisk together the flour, sugar, baking soda, cinnamon, and salt.\n3. Grate the carrots.\n4. In a separate bowl, whisk together the eggs, oil, and vanilla.\n5. Pour the wet ingredients into the dry ingredients and mix until just combined.\n6. Fold in the grated carrots (and nuts or raisins, if using).\n7. Pour the batter into the prepared cake pan and bake for 30-40 minutes, or until a toothpick inserted into the center comes out clean.\n8. Let the cake cool completely.\n9. For the frosting, beat together the cream cheese, butter, powdered sugar, and vanilla until smooth and creamy.\n10. Frost the cooled cake.",
     "cooking_time_in_minutes": 60,
     "difficulty": "medium",
-    "cuisine": "American"
+    "cuisine": "American",
+    "description": "A moist, spiced cake loaded with freshly grated carrots and topped with tangy cream cheese frosting. A timeless crowd-pleaser."
   }
 ]
