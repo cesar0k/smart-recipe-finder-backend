@@ -256,21 +256,30 @@ async def upload_recipe_images(
             status_code=400, detail="Too many files sent. Max 5 allowed."
         )
 
-    async def process_file(file: UploadFile) -> str:
+    async def process_file(file: UploadFile) -> tuple[str, str]:
         valid_content = await image_service.validate_and_process_image(file)
+        original_bytes = valid_content.getvalue()
 
-        filename = file.filename or ""
-        extension = filename.split(".")[-1] if "." in filename else "jpg"
-        obj_name = f"recipes/{recipe_id}/{uuid.uuid4()}.{extension}"
+        # Generate compressed versions
+        versions = image_service.generate_compressed_versions(original_bytes)
+        file_id = str(uuid.uuid4())
 
-        content_type = file.content_type or "application/octet-stream"
+        # Upload full version (WebP)
+        full_key = f"recipes/{recipe_id}/{file_id}.webp"
+        full_url = await s3_client.upload_file(versions["full"], full_key, "image/webp")
 
-        return await s3_client.upload_file(valid_content, obj_name, content_type)
+        # Upload thumbnail (WebP)
+        thumb_key = f"recipes/{recipe_id}/{file_id}_thumb.webp"
+        thumb_url = await s3_client.upload_file(versions["thumb"], thumb_key, "image/webp")
 
-    uploaded_urls = await asyncio.gather(*[process_file(f) for f in files])
+        return full_url, thumb_url
+
+    results = await asyncio.gather(*[process_file(f) for f in files])
 
     current_urls = list(recipe.image_urls) if recipe.image_urls else []
-    recipe.image_urls = current_urls + list(uploaded_urls)
+    current_thumbs = list(recipe.thumbnail_urls) if recipe.thumbnail_urls else []
+    recipe.image_urls = current_urls + [r[0] for r in results]
+    recipe.thumbnail_urls = current_thumbs + [r[1] for r in results]
 
     db.add(recipe)
     await db.commit()

@@ -29,6 +29,9 @@ class Recipe(Base):
     image_urls: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, server_default=text("'{}'"), nullable=False
     )
+    thumbnail_urls: Mapped[list[str]] = mapped_column(
+        ARRAY(String), default=list, server_default=text("'{}'"), nullable=False
+    )
     owner_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

@@ -14,6 +14,7 @@ class Recipe(RecipeBase):
     image_urls: list[Annotated[HttpUrl, StringConstraints(max_length=1024)]] = Field(
         default_factory=list, max_length=10
     )
+    thumbnail_urls: list[str] = Field(default_factory=list)
     owner_id: int | None = None
     owner_username: str | None = None
     status: str = "approved"
