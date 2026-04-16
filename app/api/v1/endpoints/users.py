@@ -106,15 +106,16 @@ async def upload_avatar(
     """Upload or replace user avatar."""
     valid_content = await image_service.validate_and_process_image(file)
 
-    filename = file.filename or ""
-    extension = filename.split(".")[-1] if "." in filename else "jpg"
+    # Ensure the avatar is in a browser-compatible format (converts HEIC → JPEG, etc.)
+    converted, content_type, extension = image_service.ensure_browser_compatible(
+        valid_content.getvalue()
+    )
     obj_name = f"avatars/{current_user.id}/{uuid.uuid4()}.{extension}"
-    content_type = file.content_type or "application/octet-stream"
 
     if current_user.avatar_url:
         await s3_client.delete_image_from_s3(current_user.avatar_url)
 
-    url = await s3_client.upload_file(valid_content, obj_name, content_type)
+    url = await s3_client.upload_file(converted, obj_name, content_type)
     current_user.avatar_url = url
     db.add(current_user)
     await db.commit()

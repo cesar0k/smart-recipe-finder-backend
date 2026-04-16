@@ -1,10 +1,13 @@
 from io import BytesIO
 
 import magic
+import pillow_heif
 from fastapi import HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 
 from app.core.config import settings
+
+pillow_heif.register_heif_opener()
 
 FULL_MAX_WIDTH = 1200
 FULL_QUALITY = 85
@@ -48,6 +51,31 @@ async def validate_and_process_image(file: UploadFile) -> BytesIO:
 
     except UnidentifiedImageError:
         raise HTTPException(status_code=400, detail="Invalid image file") from None
+
+
+BROWSER_SAFE_FORMATS = {"JPEG", "PNG", "WEBP"}
+
+
+def ensure_browser_compatible(content: bytes) -> tuple[BytesIO, str, str]:
+    """Convert image to JPEG if its format is not natively supported by browsers.
+
+    Returns (file_bytes, content_type, extension).
+    """
+    img = Image.open(BytesIO(content))
+    fmt = (img.format or "").upper()
+
+    if fmt in BROWSER_SAFE_FORMATS:
+        ext = fmt.lower()
+        if ext == "jpeg":
+            ext = "jpg"
+        ct = f"image/{fmt.lower()}"
+        return BytesIO(content), ct, ext
+
+    # Convert non-browser formats (HEIC, HEIF, TIFF, …) to JPEG
+    buf = BytesIO()
+    img.convert("RGB").save(buf, format="JPEG", quality=85)
+    buf.seek(0)
+    return buf, "image/jpeg", "jpg"
 
 
 def _resize_to_webp(content: bytes, max_width: int, quality: int) -> BytesIO:
