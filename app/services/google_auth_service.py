@@ -62,6 +62,8 @@ async def authenticate_or_create_google_user(
         return user
 
     display_name = google_user_info.get("name", "") or None
+    picture_url = google_user_info.get("picture") or None
+
     # Generate username from email prefix, ensure uniqueness
     base_username = email.split("@")[0]
     username = base_username
@@ -78,6 +80,7 @@ async def authenticate_or_create_google_user(
         email=email,
         username=username,
         display_name=display_name,
+        avatar_url=picture_url,
         hashed_password=None,
         auth_provider="google",
         role="user",
