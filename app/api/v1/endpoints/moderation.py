@@ -5,10 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
 from app.api.deps import require_moderator
+from app.core.cache import Cache, get_cache
 from app.db.session import get_db
 from app.models.recipe_draft import RecipeDraft
 from app.models.user import User
-from app.services import moderation_log_service, moderation_service, recipe_service
+from app.services import (
+    moderation_log_service,
+    moderation_service,
+    recipe_service,
+    search_cache,
+)
 
 router = APIRouter()
 
@@ -98,6 +104,7 @@ async def list_pending_recipes(
 async def moderate_recipe(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     mod: Annotated[User, Depends(require_moderator)],
     recipe_id: int,
     body: schemas.ModerationAction,
@@ -125,6 +132,7 @@ async def moderate_recipe(
         moderator_id=mod.id,
         rejection_reason=body.rejection_reason,
     )
+    await search_cache.bump_search_version(cache)
     return schemas.Recipe.model_validate(updated)
 
 
@@ -150,6 +158,7 @@ async def list_pending_drafts(
 async def moderate_draft(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     mod: Annotated[User, Depends(require_moderator)],
     draft_id: int,
     body: schemas.ModerationAction,
@@ -183,4 +192,5 @@ async def moderate_draft(
         moderator_id=mod.id,
         rejection_reason=body.rejection_reason,
     )
+    await search_cache.bump_search_version(cache)
     return schemas.RecipeDraftResponse.model_validate(updated)

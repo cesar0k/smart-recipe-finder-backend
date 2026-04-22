@@ -7,10 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models, schemas
 from app.api.deps import get_current_user, get_current_user_optional
+from app.core.cache import Cache, get_cache
 from app.core.s3_client import s3_client
 from app.db.session import get_db
 from app.models.user import User
-from app.services import image_service, recipe_service
+from app.services import image_service, recipe_service, search_cache
 
 router = APIRouter()
 
@@ -28,12 +29,14 @@ def _check_recipe_owner(recipe: models.Recipe, user: User) -> None:
 async def create_new_recipe(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User, Depends(get_current_user)],
     recipe_in: schemas.RecipeCreate,
 ) -> schemas.Recipe:
     db_recipe = await recipe_service.create_recipe(
         db=db, recipe_in=recipe_in, current_user=current_user
     )
+    await search_cache.bump_search_version(cache)
     return schemas.Recipe.model_validate(db_recipe)
 
 
@@ -122,6 +125,7 @@ async def read_user_recipes(
 async def search_recipes(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     q: str = Query(
         ..., description="Search query for recipes using vector search", max_length=200
     ),
@@ -145,6 +149,7 @@ async def search_recipes(
         max_time=max_time,
         difficulty=difficulty,
         cuisine=cuisine,
+        cache=cache,
     )
     return [schemas.Recipe.model_validate(r) for r in recipes]
 
@@ -180,6 +185,7 @@ async def read_recipe_by_id(
 async def update_existing_recipe(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User, Depends(get_current_user)],
     recipe_id: int,
     recipe_in: schemas.RecipeUpdate,
@@ -200,6 +206,7 @@ async def update_existing_recipe(
     if isinstance(result, models.RecipeDraft):
         return schemas.RecipeDraftResponse.model_validate(result)
 
+    await search_cache.bump_search_version(cache)
     return schemas.Recipe.model_validate(result)
 
 
@@ -240,6 +247,7 @@ async def resubmit_recipe(
 async def delete_existing_recipe(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User, Depends(get_current_user)],
     recipe_id: int,
 ) -> schemas.Recipe:
@@ -255,6 +263,7 @@ async def delete_existing_recipe(
     if not deleted_recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
+    await search_cache.bump_search_version(cache)
     return schemas.Recipe.model_validate(deleted_recipe)
 
 
