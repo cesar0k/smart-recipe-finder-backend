@@ -23,7 +23,7 @@ class ConnectionManager:
             del self._connections[user_id]
         logger.info("WS disconnected: user_id=%d", user_id)
 
-    async def send_to_user(self, user_id: int, data: dict) -> None:
+    async def send_to_user(self, user_id: int, data: dict[str, object]) -> None:
         """Send JSON to all connections of a specific user."""
         connections = self._connections.get(user_id, set())
         dead: list[WebSocket] = []
@@ -35,7 +35,7 @@ class ConnectionManager:
         for ws in dead:
             self._connections[user_id].discard(ws)
 
-    async def broadcast(self, user_ids: list[int], data: dict) -> None:
+    async def broadcast(self, user_ids: list[int], data: dict[str, object]) -> None:
         """Send JSON to multiple users."""
         for uid in user_ids:
             await self.send_to_user(uid, data)

@@ -1,3 +1,5 @@
+from typing import cast
+
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,7 +47,7 @@ async def exchange_code_for_user_info(
         if userinfo_response.status_code != 200:
             raise GoogleAuthError("Failed to fetch user info from Google")
 
-        return userinfo_response.json()
+        return cast(dict[str, str], userinfo_response.json())
 
 
 async def authenticate_or_create_google_user(

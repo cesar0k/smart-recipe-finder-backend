@@ -86,7 +86,7 @@ def _resize_to_webp(content: bytes, max_width: int, quality: int) -> BytesIO:
     if img.width > max_width:
         ratio = max_width / img.width
         new_size = (max_width, int(img.height * ratio))
-        img = img.resize(new_size, Image.LANCZOS)
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
 
     buf = BytesIO()
     img.save(buf, format="WEBP", quality=quality)
