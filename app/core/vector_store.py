@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class VectorStore:
     _instance: Self | None = None
     model: SentenceTransformer | None = None
+    search_calls_count: int = 0
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
         if kwargs.get("force_new", False):
@@ -128,6 +129,8 @@ class VectorStore:
         await asyncio.to_thread(_sync_upsert)
 
     async def search(self, query: str, n_results: int = 5) -> list[int]:
+        VectorStore.search_calls_count += 1
+
         query_vec_result = await self.embed_query(query)
         query_embedding_list = query_vec_result.tolist()
 

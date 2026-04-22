@@ -90,7 +90,7 @@ The project includes a comprehensive test suite covering various functionalities
 To run the entire test suite, execute `pytest` without any specific markers:
 
 ```bash
-docker compose exec app pytest && docker compose restart app
+docker compose exec app pytest
 ```
 
 #### Smoke Tests
@@ -98,7 +98,7 @@ docker compose exec app pytest && docker compose restart app
 Smoke tests are a subset of tests designed to quickly verify that the most important functions of the application are working correctly. To run only the smoke tests execute:
 
 ```bash
-docker compose exec app pytest -m smoke && docker compose restart app
+docker compose exec app pytest -m smoke
 ```
 
 #### CRUD Tests
@@ -106,7 +106,7 @@ docker compose exec app pytest -m smoke && docker compose restart app
 CRUD tests cover the full lifecycle of recipe management operations (Create, Read, Update, Delete). Unlike smoke tests, this suite performs a comprehensive check of the API functionality, including edge cases, partial updates, and error handling. To run the full functional test suite execute:
 
 ```bash
-docker compose exec app pytest -m crud && docker compose restart app
+docker compose exec app pytest -m crud
 ```
 
 #### Evaluation Tests
@@ -114,8 +114,14 @@ docker compose exec app pytest -m crud && docker compose restart app
 Evaluation tests are designed to assess specific aspects of the application, often involving dedicated datasets or complex scenarios. To run only the evaluation tests execute:
 
 ```bash
-docker compose exec app pytest -m eval && docker compose restart app
+docker compose exec app pytest -m eval
 ```
+
+> **Note:** the test suite loads the embedding model into the same container as the live backend. On memory-constrained setups the backend may become unresponsive after tests finish. If that happens, restart the app:
+>
+> ```bash
+> docker compose restart app
+> ```
 
 ## Seeding the Database
 
@@ -128,7 +134,7 @@ The script can seed the database with recipes in different languages. Use the `-
 To seed the database with English recipes, run the following command:
 
 ```bash
-docker compose exec app python scripts/seed_db.py --lang en && docker compose restart app
+docker compose exec app python scripts/seed_db.py --lang en
 ```
 
 If you don't specify a language, it will default to English.
@@ -138,10 +144,16 @@ If you don't specify a language, it will default to English.
 To seed the database with Russian recipes, run:
 
 ```bash
-docker compose exec app python scripts/seed_db.py --lang ru && docker compose restart app
+docker compose exec app python scripts/seed_db.py --lang ru
 ```
 
 The script will clear existing recipes and add a predefined set to your database, which you can then query via the API.
+
+> **Note:** the seed script loads the embedding model into the same container as the live backend. On memory-constrained setups the backend may become unresponsive after the script finishes. If that happens, restart the app:
+>
+> ```bash
+> docker compose restart app
+> ```
 
 ## Search Capabilities
 
@@ -167,20 +179,60 @@ The evaluation script can be run for different languages. Use the `--lang` flag 
 **Run Evaluation Script (English - Default)**:
 
 ```bash
-docker compose exec app python scripts/evaluate.py --lang en && docker compose restart app
+docker compose exec app python scripts/evaluate.py --lang en
 ```
 
 **Run Evaluation Script (Russian)**:
 
 ```bash
-docker compose exec app python scripts/evaluate.py --lang ru && docker compose restart app
+docker compose exec app python scripts/evaluate.py --lang ru
 ```
 
 This will run a series of tests and generate a performance comparison chart.
 
+> **Note:** the evaluation script loads the embedding model into the same container as the live backend. On memory-constrained machines the backend may become unresponsive after the script finishes. If that happens, restart the app:
+>
+> ```bash
+> docker compose restart app
+> ```
+
+### Redis Cache Benchmark
+
+Vector search is the most expensive operation in the API: each call runs the embedding model and a ChromaDB similarity query. We cache the vector-search IDs in Redis with version-scoped keys; the script below measures the impact.
+
+```bash
+docker compose exec app python scripts/benchmark_search.py --iterations 10
+```
+
+The script calls `recipe_service.search_recipes_by_vector()` directly (same approach as `evaluate.py`) to isolate the cache impact from the HTTP stack. Two scenarios are compared:
+
+- **cold** — forces a cache MISS on every call by bumping `search:version`.
+- **warm** — pre-warms the cache, then hits it on every subsequent call.
+
+For each scenario the script collects latency percentiles (p50/p95/p99) and reads `VectorStore.search_calls_count` — the total number of times the heavy embedding + ChromaDB pipeline actually ran.
+
+**Representative result** (5 iterations × 10 queries = 50 calls per scenario, local Docker, laptop CPU):
+
+| Scenario | calls | `vector_store.search()` | p50    | p95     | p99      | avg    |
+|----------|-------|-------------------------|--------|---------|----------|--------|
+| cold     | 50    | **50**                  | 307 ms | 2683 ms | 11463 ms | 975 ms |
+| warm     | 50    | **0**                   | 2 ms   | 2 ms    | 3 ms     | 2 ms   |
+
+- **Speedup:** ~500× on average, ~1000× on p95.
+- **Backend load:** 100% of expensive vector-search invocations eliminated on repeated queries.
+- Chart: `benchmark_results.png` (generated next to the script).
+
+> **Note:** same caveat as `evaluate.py` — the benchmark loads the embedding model inside the app container, which can leave the backend unresponsive on memory-constrained machines. If that happens, restart the app:
+>
+> ```bash
+> docker compose restart app
+> ```
+
 ## Visual Results
 
 Upon running the evaluation script, a graph file **`evaluation_results.png`** will be generated in the project root.
+
+The cache benchmark produces a separate file **`benchmark_results.png`** with latency histograms and percentile bars for cold vs. warm runs.
 
 ## Project Status
 
