@@ -1,6 +1,8 @@
 import logging
 from collections.abc import Sequence
+from typing import cast
 
+from sqlalchemy import CursorResult
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func as sa_func
 from sqlalchemy import update
@@ -147,9 +149,9 @@ async def mark_all_read(db: AsyncSession, *, user_id: int) -> int:
         )
         .values(is_read=True)
     )
-    result = await db.execute(stmt)
+    result = cast(CursorResult[tuple[int, ...]], await db.execute(stmt))
     await db.commit()
-    return result.rowcount  # type: ignore[return-value]
+    return result.rowcount
 
 
 async def delete_notification(
@@ -173,6 +175,6 @@ async def delete_notification(
 async def delete_all_notifications(db: AsyncSession, *, user_id: int) -> int:
     """Delete all notifications for a user. Returns count of deleted."""
     stmt = sa_delete(Notification).where(Notification.user_id == user_id)
-    result = await db.execute(stmt)
+    result = cast(CursorResult[tuple[int, ...]], await db.execute(stmt))
     await db.commit()
-    return result.rowcount  # type: ignore[return-value]
+    return result.rowcount

@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func as sa_func
@@ -71,7 +72,7 @@ async def search_users(
     query: str,
     skip: int = 0,
     limit: int = 20,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Search active users by username. Returns list of dicts with recipe_count."""
     stmt = (
         select(
@@ -112,7 +113,7 @@ async def get_public_profile(
     db: AsyncSession,
     *,
     user_id: int,
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Get public profile: user info + approved recipe count."""
     stmt = (
         select(

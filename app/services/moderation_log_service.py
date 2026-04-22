@@ -1,5 +1,7 @@
 from collections.abc import Sequence
+from typing import cast
 
+from sqlalchemy import CursorResult
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -69,6 +71,6 @@ async def delete_log(
 async def delete_all_logs(db: AsyncSession) -> int:
     """Delete all moderation log entries. Returns count of deleted."""
     stmt = sa_delete(ModerationLog)
-    result = await db.execute(stmt)
+    result = cast(CursorResult[tuple[int, ...]], await db.execute(stmt))
     await db.commit()
-    return result.rowcount  # type: ignore[return-value]
+    return result.rowcount
