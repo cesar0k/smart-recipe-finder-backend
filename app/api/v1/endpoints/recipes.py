@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import models, schemas
 from app.api.deps import get_current_user, get_current_user_optional
 from app.core.cache import Cache, get_cache
+from app.core.health import is_embedding_model_ready
 from app.core.s3_client import s3_client
 from app.db.session import get_db
 from app.models.user import User
@@ -150,6 +151,12 @@ async def search_recipes(
     difficulty: str | None = Query(None, description="Comma-separated: easy,medium,hard"),
     cuisine: str | None = Query(None, description="Comma-separated cuisine values"),
 ) -> list[schemas.Recipe]:
+    if not is_embedding_model_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Embedding model is warming up, please retry in a moment",
+        )
+
     recipes = await recipe_service.search_recipes_by_vector(
         db=db,
         query_str=q,

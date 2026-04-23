@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .endpoints import auth, moderation, notifications, recipes, users
+from .endpoints import auth, health, moderation, notifications, recipes, users
 from .ws import notifications as ws_notifications
 
 api_router = APIRouter()
@@ -13,6 +13,7 @@ api_router.include_router(
 api_router.include_router(
     notifications.router, prefix="/notifications", tags=["notifications"]
 )
+api_router.include_router(health.router, prefix="/health", tags=["health"])
 api_router.include_router(
     ws_notifications.router, prefix="/ws", tags=["websocket"]
 )
