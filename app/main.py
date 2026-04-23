@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.api.v1.api import api_router
+from app.core.cache import close_redis, init_redis
 from app.core.config import settings
 from app.core.s3_client import s3_client
 from app.core.vector_store import vector_store
@@ -19,9 +20,13 @@ logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdo
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    await init_redis()
     vector_store.preload_model()
     await s3_client.ensure_bucket_exists()
-    yield
+    try:
+        yield
+    finally:
+        await close_redis()
 
 
 class RootResponse(BaseModel):

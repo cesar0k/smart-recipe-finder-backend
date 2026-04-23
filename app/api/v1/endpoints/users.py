@@ -6,10 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
 from app.api.deps import get_current_user, require_admin
+from app.core.cache import Cache, get_cache
 from app.core.s3_client import s3_client
 from app.db.session import get_db
 from app.models.user import User
-from app.services import auth_service, image_service, user_service
+from app.services import auth_service, cache_keys, image_service, user_service
 
 router = APIRouter()
 
@@ -42,13 +43,22 @@ async def search_users(
 async def get_user_profile(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     user_id: int,
 ) -> schemas.PublicUserResponse:
     """Get public user profile. Public endpoint."""
+    key = cache_keys.user_profile(user_id)
+    cached = await cache.get_model(key, schemas.PublicUserResponse)
+    if cached is not None:
+        return cached
+
     profile = await user_service.get_public_profile(db, user_id=user_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return schemas.PublicUserResponse(**profile)
+
+    response = schemas.PublicUserResponse(**profile)
+    await cache.set_model(key, response, ttl=cache_keys.TTL_USER_PROFILE)
+    return response
 
 
 # --- Current user endpoints (authenticated) ---
@@ -73,6 +83,7 @@ async def get_me(
 async def update_me(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User, Depends(get_current_user)],
     body: schemas.UserSelfUpdate,
 ) -> schemas.UserResponse:
@@ -89,6 +100,7 @@ async def update_me(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         )
+    await cache_keys.invalidate_on_user_change(cache, user_id=current_user.id)
     return schemas.UserResponse.model_validate(updated)
 
 
@@ -100,6 +112,7 @@ async def update_me(
 async def upload_avatar(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User, Depends(get_current_user)],
     file: Annotated[UploadFile, File(...)],
 ) -> schemas.UserResponse:
@@ -120,6 +133,7 @@ async def upload_avatar(
     db.add(current_user)
     await db.commit()
     await db.refresh(current_user)
+    await cache_keys.invalidate_on_user_change(cache, user_id=current_user.id)
     return schemas.UserResponse.model_validate(current_user)
 
 
@@ -192,6 +206,7 @@ async def get_user(
 async def update_user(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     admin: Annotated[User, Depends(require_admin)],
     user_id: int,
     user_in: schemas.UserUpdate,
@@ -218,6 +233,7 @@ async def update_user(
         role=user_in.role,
         is_active=user_in.is_active,
     )
+    await cache_keys.invalidate_on_user_change(cache, user_id=user_id)
     return schemas.UserResponse.model_validate(updated)
 
 
@@ -229,6 +245,7 @@ async def update_user(
 async def delete_user(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     admin: Annotated[User, Depends(require_admin)],
     user_id: int,
 ) -> schemas.UserResponse:
@@ -249,4 +266,5 @@ async def delete_user(
         )
 
     deleted = await user_service.delete_user(db=db, db_user=db_user)
+    await cache_keys.invalidate_on_user_change(cache, user_id=user_id)
     return schemas.UserResponse.model_validate(deleted)

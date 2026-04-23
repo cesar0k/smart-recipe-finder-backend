@@ -10,6 +10,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.selectable import Select
 
+from app.core.cache import Cache
 from app.core.s3_client import s3_client
 from app.core.text_utils import get_word_forms
 from app.core.vector_store import vector_store
@@ -17,6 +18,7 @@ from app.models import Recipe
 from app.models.recipe_draft import RecipeDraft
 from app.models.user import User
 from app.schemas import RecipeCreate, RecipeUpdate
+from app.services import search_cache
 
 __all__ = [
     "create_recipe",
@@ -545,8 +547,16 @@ async def search_recipes_by_vector(
     max_time: int | None = None,
     difficulty: str | None = None,
     cuisine: str | None = None,
+    cache: Cache | None = None,
 ) -> list[Recipe]:
-    recipe_ids = await vector_store.search(query=query_str, n_results=50)
+    recipe_ids: list[int] | None = None
+    if cache is not None:
+        recipe_ids = await search_cache.get_cached_search_ids(cache, query_str)
+
+    if recipe_ids is None:
+        recipe_ids = await vector_store.search(query=query_str, n_results=50)
+        if cache is not None:
+            await search_cache.cache_search_ids(cache, query_str, recipe_ids)
 
     if not recipe_ids:
         return []

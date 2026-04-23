@@ -1,3 +1,13 @@
+"""Evaluate recipe search and filter methods against labeled datasets.
+
+Usage:
+    Evaluate English dataset (default):
+        docker compose exec app python scripts/evaluate.py --lang en
+
+    Evaluate Russian dataset:
+        docker compose exec app python scripts/evaluate.py --lang ru
+"""
+
 import argparse
 import asyncio
 import json

@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
+    REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_DEFAULT_TTL: int = 3600  # 1 hour
+
     @model_validator(mode="after")
     def check_required_fields(self) -> Self:
         missing_fields = []
@@ -89,6 +94,11 @@ class Settings(BaseSettings):
             f"postgresql+psycopg2://{self.DB_USER}:{self.DB_PASSWORD}@"
             f"{self.DB_HOST}:{self.DB_INTERNAL_PORT}/{self.DB_NAME}"
         )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def REDIS_URL(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
 
 settings = Settings()
