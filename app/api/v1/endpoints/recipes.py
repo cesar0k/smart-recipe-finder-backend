@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 from typing import Annotated
 
@@ -11,7 +12,7 @@ from app.core.cache import Cache, get_cache
 from app.core.s3_client import s3_client
 from app.db.session import get_db
 from app.models.user import User
-from app.services import image_service, recipe_service, search_cache
+from app.services import cache_keys, image_service, recipe_service, search_cache
 
 router = APIRouter()
 
@@ -37,6 +38,7 @@ async def create_new_recipe(
         db=db, recipe_in=recipe_in, current_user=current_user
     )
     await search_cache.bump_search_version(cache)
+    await cache_keys.invalidate_on_recipe_change(cache)
     return schemas.Recipe.model_validate(db_recipe)
 
 
@@ -44,9 +46,17 @@ async def create_new_recipe(
 async def get_cuisines(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
 ) -> list[str]:
     """Return distinct cuisine values from approved recipes."""
-    return await recipe_service.get_distinct_cuisines(db)
+    key = cache_keys.cuisines()
+    cached = await cache.get_raw(key)
+    if cached is not None:
+        return list(json.loads(cached))
+
+    result = await recipe_service.get_distinct_cuisines(db)
+    await cache.set_raw(key, json.dumps(result), ttl=cache_keys.TTL_CUISINES)
+    return result
 
 
 @router.get("/", response_model=list[schemas.Recipe], operation_id="read_recipes")
@@ -160,9 +170,15 @@ async def search_recipes(
 async def read_recipe_by_id(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User | None, Depends(get_current_user_optional)],
     recipe_id: int,
 ) -> schemas.Recipe:
+    key = cache_keys.recipe_detail(recipe_id)
+    cached = await cache.get_model(key, schemas.Recipe)
+    if cached is not None and cached.status == "approved":
+        return cached
+
     recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
@@ -174,7 +190,10 @@ async def read_recipe_by_id(
         if not (is_owner or is_mod):
             raise HTTPException(status_code=404, detail="Recipe not found")
 
-    return schemas.Recipe.model_validate(recipe)
+    response = schemas.Recipe.model_validate(recipe)
+    if response.status == "approved":
+        await cache.set_model(key, response, ttl=cache_keys.TTL_RECIPE_DETAIL)
+    return response
 
 
 @router.patch(
@@ -207,6 +226,7 @@ async def update_existing_recipe(
         return schemas.RecipeDraftResponse.model_validate(result)
 
     await search_cache.bump_search_version(cache)
+    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return schemas.Recipe.model_validate(result)
 
 
@@ -218,6 +238,7 @@ async def update_existing_recipe(
 async def resubmit_recipe(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User, Depends(get_current_user)],
     recipe_id: int,
     recipe_in: schemas.RecipeUpdate,
@@ -238,6 +259,7 @@ async def resubmit_recipe(
     updated = await recipe_service.resubmit_recipe(
         db=db, db_recipe=db_recipe, recipe_in=recipe_in
     )
+    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return schemas.Recipe.model_validate(updated)
 
 
@@ -264,6 +286,7 @@ async def delete_existing_recipe(
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     await search_cache.bump_search_version(cache)
+    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return schemas.Recipe.model_validate(deleted_recipe)
 
 
@@ -275,6 +298,7 @@ async def delete_existing_recipe(
 async def upload_recipe_images(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User, Depends(get_current_user)],
     recipe_id: int,
     files: Annotated[list[UploadFile], File(...)],
@@ -319,6 +343,7 @@ async def upload_recipe_images(
     await db.commit()
     await db.refresh(recipe)
 
+    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return schemas.Recipe.model_validate(recipe)
 
 
@@ -330,6 +355,7 @@ async def upload_recipe_images(
 async def delete_recipe_images(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User, Depends(get_current_user)],
     recipe_id: int,
     delete_data: schemas.RecipeImagesDelete,
@@ -349,4 +375,5 @@ async def delete_recipe_images(
     if not updated_recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
+    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return schemas.Recipe.model_validate(updated_recipe)

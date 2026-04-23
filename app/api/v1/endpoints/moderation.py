@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models.recipe_draft import RecipeDraft
 from app.models.user import User
 from app.services import (
+    cache_keys,
     moderation_log_service,
     moderation_service,
     recipe_service,
@@ -27,10 +28,18 @@ router = APIRouter()
 async def get_pending_count(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
     _mod: Annotated[User, Depends(require_moderator)],
 ) -> schemas.PendingCountResponse:
+    key = cache_keys.pending_count()
+    cached = await cache.get_model(key, schemas.PendingCountResponse)
+    if cached is not None:
+        return cached
+
     counts = await moderation_service.get_pending_counts(db)
-    return schemas.PendingCountResponse(**counts)
+    response = schemas.PendingCountResponse(**counts)
+    await cache.set_model(key, response, ttl=cache_keys.TTL_PENDING_COUNT)
+    return response
 
 
 @router.get(
@@ -133,6 +142,7 @@ async def moderate_recipe(
         rejection_reason=body.rejection_reason,
     )
     await search_cache.bump_search_version(cache)
+    await cache_keys.invalidate_on_moderation(cache, recipe_id=recipe.id)
     return schemas.Recipe.model_validate(updated)
 
 
@@ -193,4 +203,5 @@ async def moderate_draft(
         rejection_reason=body.rejection_reason,
     )
     await search_cache.bump_search_version(cache)
+    await cache_keys.invalidate_on_moderation(cache, recipe_id=draft.recipe_id)
     return schemas.RecipeDraftResponse.model_validate(updated)
