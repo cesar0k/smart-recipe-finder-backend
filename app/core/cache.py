@@ -77,7 +77,41 @@ class Cache:
         return int(raw) if raw else 0
 
 
+class NullCache(Cache):
+    """No-op cache used when Redis is unavailable (tests, evaluate.py, etc.).
+
+    All reads return misses, all writes are silently dropped, so the
+    application runs correctly without Redis at the cost of no caching.
+    """
+
+    def __init__(self) -> None:
+        pass
+
+    async def get_raw(self, key: str) -> str | None:
+        return None
+
+    async def set_raw(self, key: str, value: str, ttl: int | None = None) -> None:
+        return None
+
+    async def get_model(self, key: str, model: type[T]) -> T | None:
+        return None
+
+    async def set_model(
+        self, key: str, value: BaseModel, ttl: int | None = None
+    ) -> None:
+        return None
+
+    async def delete(self, *keys: str) -> None:
+        return None
+
+    async def incr(self, key: str) -> int:
+        return 0
+
+    async def get_version(self, key: str) -> int:
+        return 0
+
+
 async def get_cache() -> Cache:
     if _redis is None:
-        raise RuntimeError("Redis not initialized")
+        return NullCache()
     return Cache(_redis)
