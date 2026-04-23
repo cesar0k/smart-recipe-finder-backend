@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sys
 from collections.abc import AsyncGenerator
@@ -21,8 +22,8 @@ logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdo
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_redis()
-    vector_store.preload_model()
     await s3_client.ensure_bucket_exists()
+    asyncio.create_task(asyncio.to_thread(vector_store.preload_model))
     try:
         yield
     finally:
