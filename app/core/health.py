@@ -77,6 +77,10 @@ async def _check_minio() -> None:
     )
 
 
+def is_embedding_model_ready() -> bool:
+    return vector_store.model is not None
+
+
 async def run_all_checks() -> HealthReport:
     names = ["postgres", "redis", "chroma", "minio"]
     coros = [
