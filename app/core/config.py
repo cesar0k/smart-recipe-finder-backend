@@ -47,6 +47,9 @@ class Settings(BaseSettings):
 
     EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large-instruct"
 
+    SIMILAR_RECIPES_MAX: int = 6
+    SIMILAR_RECIPES_THRESHOLD: float = 0.75
+
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 

@@ -18,7 +18,7 @@ from app.models import Recipe
 from app.models.recipe_draft import RecipeDraft
 from app.models.user import User
 from app.schemas import RecipeCreate, RecipeUpdate
-from app.services import search_cache
+from app.services import search_cache, similar_cache
 
 __all__ = [
     "create_recipe",
@@ -585,3 +585,43 @@ async def search_recipes_by_vector(
             ordered_recipes.append(recipes_map[rid])
 
     return ordered_recipes[:6]
+
+
+async def get_similar_recipes(
+    db: AsyncSession,
+    *,
+    recipe_id: int,
+    threshold: float,
+    limit: int,
+    candidate_pool: int = 20,
+    cache: Cache | None = None,
+) -> list[Recipe]:
+    source = await get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if source is None or source.status != "approved":
+        return []
+
+    pairs: list[tuple[int, float]] | None = None
+    if cache is not None:
+        pairs = await similar_cache.get_cached_similar_pairs(cache, recipe_id)
+
+    if pairs is None:
+        pairs = await vector_store.search_similar_by_id(
+            recipe_id=recipe_id, n_results=candidate_pool
+        )
+        if cache is not None:
+            await similar_cache.cache_similar_pairs(cache, recipe_id, pairs)
+
+    filtered_ids = [rid for rid, dist in pairs if dist <= threshold]
+    if not filtered_ids:
+        return []
+
+    query = _with_owner(
+        select(Recipe).where(
+            Recipe.id.in_(filtered_ids),
+            Recipe.status == "approved",
+        )
+    )
+    result = await db.execute(query)
+    recipes_map = {r.id: r for r in result.scalars().unique().all()}
+    ordered = [recipes_map[rid] for rid in filtered_ids if rid in recipes_map]
+    return ordered[:limit]
