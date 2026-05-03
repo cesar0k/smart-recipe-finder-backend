@@ -15,6 +15,7 @@ from app.services import (
     moderation_service,
     recipe_service,
     search_cache,
+    similar_cache,
 )
 
 router = APIRouter()
@@ -142,6 +143,7 @@ async def moderate_recipe(
         rejection_reason=body.rejection_reason,
     )
     await search_cache.bump_search_version(cache)
+    await similar_cache.bump_similar_version(cache)
     await cache_keys.invalidate_on_moderation(cache, recipe_id=recipe.id)
     return schemas.Recipe.model_validate(updated)
 
@@ -203,5 +205,6 @@ async def moderate_draft(
         rejection_reason=body.rejection_reason,
     )
     await search_cache.bump_search_version(cache)
+    await similar_cache.bump_similar_version(cache)
     await cache_keys.invalidate_on_moderation(cache, recipe_id=draft.recipe_id)
     return schemas.RecipeDraftResponse.model_validate(updated)
