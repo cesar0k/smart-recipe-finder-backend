@@ -147,6 +147,47 @@ class VectorStore:
 
         return [int(id_str) for id_str in results["ids"][0]]
 
+    async def search_similar_by_id(
+        self, recipe_id: int, n_results: int = 10
+    ) -> list[tuple[int, float]]:
+        VectorStore.search_calls_count += 1
+
+        def _fetch_embedding() -> Any:
+            got = self.collection.get(
+                ids=[str(recipe_id)], include=["embeddings"]
+            )
+            embs = got.get("embeddings")
+            if embs is None or len(embs) == 0:
+                return None
+            first = embs[0]
+            if hasattr(first, "tolist"):
+                return first.tolist()  # type: ignore[union-attr]
+            return list(first)
+
+        emb = await asyncio.to_thread(_fetch_embedding)
+        if emb is None:
+            return []
+
+        def _sync_query() -> VectorQueryResult:
+            query_result = self.collection.query(
+                query_embeddings=[emb],
+                n_results=n_results + 1,
+                include=["distances"],
+            )
+            return cast(VectorQueryResult, query_result)
+
+        results: Any = await asyncio.to_thread(_sync_query)
+        ids = (results.get("ids") or [[]])[0] or []
+        dists = (results.get("distances") or [[]])[0] or []
+
+        pairs: list[tuple[int, float]] = []
+        for id_str, dist in zip(ids, dists, strict=True):
+            rid = int(id_str)
+            if rid == recipe_id:
+                continue
+            pairs.append((rid, float(dist)))
+        return pairs[:n_results]
+
     async def delete_recipe(self, recipe_id: int) -> None:
         await asyncio.to_thread(self.collection.delete, ids=[str(recipe_id)])
 

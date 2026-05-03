@@ -9,11 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import models, schemas
 from app.api.deps import get_current_user, get_current_user_optional
 from app.core.cache import Cache, get_cache
+from app.core.config import settings
 from app.core.health import is_embedding_model_ready
 from app.core.s3_client import s3_client
 from app.db.session import get_db
 from app.models.user import User
-from app.services import cache_keys, image_service, recipe_service, search_cache
+from app.services import (
+    cache_keys,
+    image_service,
+    recipe_service,
+    search_cache,
+    similar_cache,
+)
 
 router = APIRouter()
 
@@ -39,6 +46,7 @@ async def create_new_recipe(
         db=db, recipe_in=recipe_in, current_user=current_user
     )
     await search_cache.bump_search_version(cache)
+    await similar_cache.bump_similar_version(cache)
     await cache_keys.invalidate_on_recipe_change(cache)
     return schemas.Recipe.model_validate(db_recipe)
 
@@ -203,6 +211,39 @@ async def read_recipe_by_id(
     return response
 
 
+@router.get(
+    "/{recipe_id}/similar",
+    response_model=list[schemas.Recipe],
+    operation_id="read_similar_recipes",
+)
+async def read_similar_recipes(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
+    recipe_id: int,
+    limit: int = Query(settings.SIMILAR_RECIPES_MAX, ge=1, le=20),
+    threshold: float = Query(
+        settings.SIMILAR_RECIPES_THRESHOLD,
+        ge=0.0,
+        le=2.0,
+        description="Max distance to consider recipes similar",
+    ),
+) -> list[schemas.Recipe]:
+    if not is_embedding_model_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Embedding model is warming up, please retry in a moment",
+        )
+    recipes = await recipe_service.get_similar_recipes(
+        db=db,
+        recipe_id=recipe_id,
+        threshold=threshold,
+        limit=limit,
+        cache=cache,
+    )
+    return [schemas.Recipe.model_validate(r) for r in recipes]
+
+
 @router.patch(
     "/{recipe_id}",
     response_model=schemas.Recipe | schemas.RecipeDraftResponse,
@@ -233,6 +274,7 @@ async def update_existing_recipe(
         return schemas.RecipeDraftResponse.model_validate(result)
 
     await search_cache.bump_search_version(cache)
+    await similar_cache.bump_similar_version(cache)
     await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return schemas.Recipe.model_validate(result)
 
@@ -293,6 +335,7 @@ async def delete_existing_recipe(
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     await search_cache.bump_search_version(cache)
+    await similar_cache.bump_similar_version(cache)
     await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return schemas.Recipe.model_validate(deleted_recipe)
 
