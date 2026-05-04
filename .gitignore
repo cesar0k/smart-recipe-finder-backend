@@ -1,6 +1,9 @@
 .DS_Store
+
+# Images of script execution results
 evaluation_results.png
 benchmark_results.png
+calibration_histograms.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

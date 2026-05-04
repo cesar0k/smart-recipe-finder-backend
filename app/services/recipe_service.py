@@ -16,6 +16,7 @@ from sqlalchemy.sql.selectable import Select
 
 from app import schemas
 from app.core.cache import Cache
+from app.core.config import settings
 from app.core.exceptions import (
     InvalidStateError,
     NotAuthorizedError,
@@ -62,6 +63,29 @@ async def _bump_recipe_caches(cache: Cache | None, *, recipe_id: int | None = No
     await search_cache.bump_search_version(cache)
     await similar_cache.bump_similar_version(cache)
     await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
+
+
+def _apply_adaptive_limit(
+    pairs: list[tuple[int, float]],
+    abs_max: float,
+    rel_margin: float,
+    hard_limit: int,
+) -> list[tuple[int, float]]:
+    """
+    Filter (recipe_id, distance) pairs adaptively.
+
+    Returns an empty list if the best match exceeds abs_max (nothing relevant).
+    Otherwise keeps all pairs within rel_margin of the best distance, capped at
+    abs_max and hard_limit.
+    """
+    if not pairs:
+        return []
+    min_dist = pairs[0][1]
+    if min_dist > abs_max:
+        return []
+    threshold = min(min_dist + rel_margin, abs_max)
+    filtered = [(rid, d) for rid, d in pairs if d <= threshold]
+    return filtered[:hard_limit]
 
 
 def _create_semantic_document(recipe: Recipe) -> tuple[str, dict[str, Any]]:
@@ -747,22 +771,23 @@ async def search_recipes_by_vector(
     cuisine: str | None = None,
     cache: Cache | None = None,
 ) -> list[Recipe]:
-    recipe_ids: list[int] | None = None
+    search_pairs: list[tuple[int, float]] | None = None
     if cache is not None:
-        recipe_ids = await search_cache.get_cached_search_ids(cache, query_str)
+        search_pairs = await search_cache.get_cached_search_pairs(cache, query_str)
 
-    if recipe_ids is None:
-        recipe_ids = await vector_store.search(query=query_str, n_results=50)
+    if search_pairs is None:
+        search_pairs = await vector_store.search(query=query_str, n_results=50)
         if cache is not None:
-            await search_cache.cache_search_ids(cache, query_str, recipe_ids)
+            await search_cache.cache_search_pairs(cache, query_str, search_pairs)
 
-    if not recipe_ids:
+    if not search_pairs:
         return []
 
     # Only return approved recipes in search results
+    candidate_ids = [rid for rid, _ in search_pairs]
     query = _with_owner(
         select(Recipe).where(
-            Recipe.id.in_(recipe_ids),
+            Recipe.id.in_(candidate_ids),
             Recipe.status == "approved",
         )
     )
@@ -778,15 +803,17 @@ async def search_recipes_by_vector(
     )
 
     result = await db.execute(query)
-    recipes = result.scalars().unique().all()
+    recipes_map = {r.id: r for r in result.scalars().unique().all()}
 
-    recipes_map = {r.id: r for r in recipes}
-    ordered_recipes = []
-    for rid in recipe_ids:
-        if rid in recipes_map:
-            ordered_recipes.append(recipes_map[rid])
-
-    return ordered_recipes[:6]
+    # Keep distance ordering and apply adaptive limit
+    ordered_pairs = [(rid, dist) for rid, dist in search_pairs if rid in recipes_map]
+    adaptive = _apply_adaptive_limit(
+        ordered_pairs,
+        abs_max=settings.SEARCH_ABSOLUTE_MAX_DIST,
+        rel_margin=settings.SEARCH_RELATIVE_MARGIN,
+        hard_limit=settings.SEARCH_HARD_LIMIT,
+    )
+    return [recipes_map[rid] for rid, _ in adaptive]
 
 
 async def get_similar_recipes(
@@ -813,10 +840,22 @@ async def get_similar_recipes(
         if cache is not None:
             await similar_cache.cache_similar_pairs(cache, recipe_id, pairs)
 
-    filtered_ids = [rid for rid, dist in pairs if dist <= threshold]
-    if not filtered_ids:
+    # Adaptive limit: threshold acts as abs_max cap, limit as hard_limit cap.
+    # Use the stricter of (threshold, SIMILAR_ABSOLUTE_MAX_DIST) and
+    # (limit, SIMILAR_HARD_LIMIT) so explicit query params always override upward.
+    abs_max = min(threshold, settings.SIMILAR_RECIPES_ABSOLUTE_MAX_DIST)
+    hard_limit = min(limit, settings.SIMILAR_RECIPES_HARD_LIMIT)
+
+    adaptive_pairs = _apply_adaptive_limit(
+        pairs,
+        abs_max=abs_max,
+        rel_margin=settings.SIMILAR_RECIPES_RELATIVE_MARGIN,
+        hard_limit=hard_limit,
+    )
+    if not adaptive_pairs:
         return []
 
+    filtered_ids = [rid for rid, _ in adaptive_pairs]
     query = _with_owner(
         select(Recipe).where(
             Recipe.id.in_(filtered_ids),
@@ -825,5 +864,4 @@ async def get_similar_recipes(
     )
     result = await db.execute(query)
     recipes_map = {r.id: r for r in result.scalars().unique().all()}
-    ordered = [recipes_map[rid] for rid in filtered_ids if rid in recipes_map]
-    return ordered[:limit]
+    return [recipes_map[rid] for rid in filtered_ids if rid in recipes_map]

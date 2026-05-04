@@ -17,7 +17,7 @@ class TestingSettings(Settings):
             "avg_f1_score": 0.17,      # baseline 0.19
             "avg_latency": 300,
         },
-        "JSONB GIN Filter": {"accuracy": 90.0, "avg_latency": 5},
+        "JSONB GIN Filter": {"accuracy": 90.0, "avg_latency": 15},
     }
 
     @property

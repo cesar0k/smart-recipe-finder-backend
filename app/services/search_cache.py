@@ -32,7 +32,7 @@ def _ttl_with_jitter() -> int:
     return SEARCH_TTL_SECONDS + random.randint(-SEARCH_TTL_JITTER, SEARCH_TTL_JITTER)
 
 
-async def get_cached_search_ids(cache: Cache, query: str) -> list[int] | None:
+async def get_cached_search_pairs(cache: Cache, query: str) -> list[tuple[int, float]] | None:
     key = await _build_key(cache, query)
     raw = await cache.get_raw(key)
     if raw is None:
@@ -41,16 +41,16 @@ async def get_cached_search_ids(cache: Cache, query: str) -> list[int] | None:
         data = json.loads(raw)
         if not isinstance(data, list):
             raise ValueError("cached search payload is not a list")
-        return [int(x) for x in data]
-    except (ValueError, TypeError):
+        return [(int(item[0]), float(item[1])) for item in data]
+    except (ValueError, TypeError, IndexError):
         logger.warning("Invalid cached search payload for key=%s; dropping", key)
         await cache.delete(key)
         return None
 
 
-async def cache_search_ids(cache: Cache, query: str, ids: list[int]) -> None:
+async def cache_search_pairs(cache: Cache, query: str, pairs: list[tuple[int, float]]) -> None:
     key = await _build_key(cache, query)
-    await cache.set_raw(key, json.dumps(ids), ttl=_ttl_with_jitter())
+    await cache.set_raw(key, json.dumps(pairs), ttl=_ttl_with_jitter())
 
 
 async def bump_search_version(cache: Cache) -> int:
