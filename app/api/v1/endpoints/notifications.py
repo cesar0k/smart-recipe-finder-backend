@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -58,8 +58,6 @@ async def mark_notification_read(
     notif = await notification_service.mark_as_read(
         db, notification_id=notification_id, user_id=current_user.id
     )
-    if notif is None:
-        raise HTTPException(status_code=404, detail="Notification not found")
     return NotificationResponse.model_validate(notif)
 
 
@@ -86,11 +84,9 @@ async def delete_notification(
     current_user: Annotated[User, Depends(get_current_user)],
     notification_id: int,
 ) -> dict[str, bool]:
-    deleted = await notification_service.delete_notification(
+    await notification_service.delete_notification(
         db, notification_id=notification_id, user_id=current_user.id
     )
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Notification not found")
     return {"deleted": True}
 
 
@@ -103,7 +99,5 @@ async def delete_all_notifications(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> dict[str, int]:
-    count = await notification_service.delete_all_notifications(
-        db, user_id=current_user.id
-    )
+    count = await notification_service.delete_all_notifications(db, user_id=current_user.id)
     return {"deleted": count}

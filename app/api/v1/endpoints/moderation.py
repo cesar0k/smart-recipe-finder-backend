@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
@@ -57,9 +57,7 @@ async def delete_moderation_log(
     _mod: Annotated[User, Depends(require_moderator)],
     log_id: int,
 ) -> dict[str, bool]:
-    deleted = await moderation_log_service.delete_log(db, log_id=log_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Log entry not found")
+    await moderation_log_service.delete_log(db, log_id=log_id)
     return {"deleted": True}
 
 

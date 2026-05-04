@@ -8,6 +8,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.core.exceptions import NotFoundError
 from app.models.notification import Notification
 from app.schemas.notification import NotificationResponse
 
@@ -125,9 +126,8 @@ async def get_unread_count(db: AsyncSession, *, user_id: int) -> int:
     return result.scalar_one()
 
 
-async def mark_as_read(
-    db: AsyncSession, *, notification_id: int, user_id: int
-) -> Notification | None:
+async def mark_as_read(db: AsyncSession, *, notification_id: int, user_id: int) -> Notification:
+    """Mark a notification as read. Raises NotFoundError if missing."""
     result = await db.execute(
         select(Notification).where(
             Notification.id == notification_id,
@@ -136,7 +136,7 @@ async def mark_as_read(
     )
     notif = result.scalar_one_or_none()
     if notif is None:
-        return None
+        raise NotFoundError("Notification not found")
     notif.is_read = True
     db.add(notif)
     await db.commit()
@@ -159,8 +159,8 @@ async def mark_all_read(db: AsyncSession, *, user_id: int) -> int:
     return result.rowcount
 
 
-async def delete_notification(db: AsyncSession, *, notification_id: int, user_id: int) -> bool:
-    """Delete a single notification. Returns True if deleted."""
+async def delete_notification(db: AsyncSession, *, notification_id: int, user_id: int) -> None:
+    """Delete a single notification. Raises NotFoundError if missing."""
     result = await db.execute(
         select(Notification).where(
             Notification.id == notification_id,
@@ -169,10 +169,9 @@ async def delete_notification(db: AsyncSession, *, notification_id: int, user_id
     )
     notif = result.scalar_one_or_none()
     if notif is None:
-        return False
+        raise NotFoundError("Notification not found")
     await db.delete(notif)
     await db.commit()
-    return True
 
 
 async def delete_all_notifications(db: AsyncSession, *, user_id: int) -> int:
