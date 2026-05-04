@@ -14,6 +14,26 @@ Frontend – [Smart Recipe Finder Frontend](https://github.com/cesar0k/smart-rec
 - **Data Validation:** Pydantic v2
 - **Containerization:** Docker & Docker Compose
 
+## Architecture
+
+The codebase follows a **thin controller / fat service** layering: HTTP endpoints in `app/api/v1/endpoints/` only translate the HTTP request, delegate to a service, and serialize the response. All business rules — caching, authorization, multi-step orchestration — live inside the corresponding service module.
+
+### Layers
+
+- **API layer** (`app/api/v1/`) — request parsing, dependency injection (`current_user`, `cache`, `db`), DTO mapping. No `if`-driven business logic, no direct cache calls, no inline ownership checks.
+- **Service layer** (`app/services/`) — orchestrates models, vector store, S3, cache, notifications. Mutating functions accept `cache: Cache | None = None` so they're usable from HTTP endpoints, background workers, and CLI scripts (`seed_db.py`) alike.
+- **Domain exceptions** (`app/core/exceptions.py`) — `NotFoundError`, `NotAuthorizedError`, `InvalidStateError`, `ValidationError`, `InvalidCredentialsError`. Services raise these instead of `HTTPException`. Global FastAPI handlers in `app/main.py` map them to 404 / 403 / 400 / 409 / 401. This keeps services framework-agnostic.
+
+### Cache invalidation policy
+
+Each writer in the service layer owns the bumps for caches it can invalidate:
+
+- `recipe_service.create_recipe / update_recipe / delete_recipe / resubmit_recipe / upload_recipe_images / delete_recipe_images` → bump search + similar versions and invalidate per-recipe keys.
+- `moderation_service.moderate_recipe / moderate_draft` → same plus `invalidate_on_moderation`.
+- `user_service.update_user / delete_user / upload_avatar`, `auth_service.update_user_profile` → `invalidate_on_user_change`.
+
+Read-through cache wrappers (`get_distinct_cuisines_cached`, `get_recipe_for_caller`, `get_pending_count_cached`, `get_public_profile_cached`) live next to the underlying queries — endpoints call them as one-liners.
+
 ## Development Environment
 
 This project includes a `.devcontainer` configuration, allowing you to open and run the entire development environment in a Docker container using VS Code with the "Dev Containers" extension. This ensures a consistent and reproducible development setup.
@@ -37,8 +57,16 @@ cd smart-recipe-finder
 
 Create a local environment file by copying the provided example.
 
+**Linux / macOS:**
+
 ```bash
 cp .env.example .env
+```
+
+**Windows (PowerShell):**
+
+```powershell
+Copy-Item .env.example .env
 ```
 
 Important: the application relies on vector search powered by an LLM backend — this requires a Hugging Face API token. Add the token to .env.example (or your local .env) as shown below:
@@ -154,6 +182,46 @@ The script will clear existing recipes and add a predefined set to your database
 > ```bash
 > docker compose restart app
 > ```
+
+## Admin Management
+
+The `scripts/create_admin.py` CLI manages the admin account. Use it to create the first admin or to transfer the admin role to another user.
+
+### Create an admin
+
+**Linux / macOS:**
+
+```bash
+docker compose exec app python scripts/create_admin.py create \
+    --email admin@example.com \
+    --username admin \
+    --password 'secure_password'
+```
+
+**Windows (PowerShell):**
+
+```powershell
+docker compose exec app python scripts/create_admin.py create `
+    --email admin@example.com `
+    --username admin `
+    --password 'secure_password'
+```
+
+### Transfer admin to another user
+
+**Linux / macOS:**
+
+```bash
+docker compose exec app python scripts/create_admin.py transfer \
+    --to username_or_email
+```
+
+**Windows (PowerShell):**
+
+```powershell
+docker compose exec app python scripts/create_admin.py transfer `
+    --to username_or_email
+```
 
 ## Search Capabilities
 

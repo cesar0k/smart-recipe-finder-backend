@@ -6,6 +6,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.core.exceptions import NotFoundError
 from app.models.moderation_log import ModerationLog
 
 
@@ -53,19 +54,14 @@ async def get_history(
     return result.scalars().all()
 
 
-async def delete_log(
-    db: AsyncSession, *, log_id: int
-) -> bool:
-    """Delete a single moderation log entry. Returns True if deleted."""
-    result = await db.execute(
-        select(ModerationLog).where(ModerationLog.id == log_id)
-    )
+async def delete_log(db: AsyncSession, *, log_id: int) -> None:
+    """Delete a single moderation log entry. Raises NotFoundError if missing."""
+    result = await db.execute(select(ModerationLog).where(ModerationLog.id == log_id))
     log = result.scalar_one_or_none()
     if log is None:
-        return False
+        raise NotFoundError("Log entry not found")
     await db.delete(log)
     await db.commit()
-    return True
 
 
 async def delete_all_logs(db: AsyncSession) -> int:

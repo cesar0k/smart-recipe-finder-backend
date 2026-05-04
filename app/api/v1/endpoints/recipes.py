@@ -1,6 +1,3 @@
-import asyncio
-import json
-import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -11,30 +8,14 @@ from app.api.deps import get_current_user, get_current_user_optional
 from app.core.cache import Cache, get_cache
 from app.core.config import settings
 from app.core.health import is_embedding_model_ready
-from app.core.s3_client import s3_client
 from app.db.session import get_db
 from app.models.user import User
-from app.services import (
-    cache_keys,
-    image_service,
-    recipe_service,
-    search_cache,
-    similar_cache,
-)
+from app.services import recipe_service
 
 router = APIRouter()
 
 
-def _check_recipe_owner(recipe: models.Recipe, user: User) -> None:
-    if user.role in ("moderator", "admin"):
-        return
-    if recipe.owner_id != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this recipe")
-
-
-@router.post(
-    "/", response_model=schemas.Recipe, status_code=201, operation_id="create_recipe"
-)
+@router.post("/", response_model=schemas.Recipe, status_code=201, operation_id="create_recipe")
 async def create_new_recipe(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -43,11 +24,8 @@ async def create_new_recipe(
     recipe_in: schemas.RecipeCreate,
 ) -> schemas.Recipe:
     db_recipe = await recipe_service.create_recipe(
-        db=db, recipe_in=recipe_in, current_user=current_user
+        db=db, cache=cache, recipe_in=recipe_in, current_user=current_user
     )
-    await search_cache.bump_search_version(cache)
-    await similar_cache.bump_similar_version(cache)
-    await cache_keys.invalidate_on_recipe_change(cache)
     return schemas.Recipe.model_validate(db_recipe)
 
 
@@ -58,14 +36,7 @@ async def get_cuisines(
     cache: Annotated[Cache, Depends(get_cache)],
 ) -> list[str]:
     """Return distinct cuisine values from approved recipes."""
-    key = cache_keys.cuisines()
-    cached = await cache.get_raw(key)
-    if cached is not None:
-        return list(json.loads(cached))
-
-    result = await recipe_service.get_distinct_cuisines(db)
-    await cache.set_raw(key, json.dumps(result), ttl=cache_keys.TTL_CUISINES)
-    return result
+    return await recipe_service.get_distinct_cuisines_cached(db, cache=cache)
 
 
 @router.get("/", response_model=list[schemas.Recipe], operation_id="read_recipes")
@@ -108,7 +79,10 @@ async def read_my_recipes(
     limit: int = Query(100, ge=1, le=100),
 ) -> list[schemas.Recipe]:
     recipes = await recipe_service.get_user_recipes(
-        db=db, user_id=current_user.id, skip=skip, limit=limit,
+        db=db,
+        user_id=current_user.id,
+        skip=skip,
+        limit=limit,
         include_pending_drafts=True,
     )
     return [schemas.Recipe.model_validate(r) for r in recipes]
@@ -127,27 +101,23 @@ async def read_user_recipes(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
 ) -> list[schemas.Recipe]:
-    """
-    View recipes of a specific user.
-    """
-    is_privileged = current_user is not None and current_user.role in ("moderator", "admin")
-    recipes = await recipe_service.get_user_recipes(
-        db=db, user_id=user_id, skip=skip, limit=limit,
-        approved_only=not is_privileged,
+    """View recipes of a specific user."""
+    recipes = await recipe_service.get_user_recipes_for_caller(
+        db=db,
+        user_id=user_id,
+        viewer=current_user,
+        skip=skip,
+        limit=limit,
     )
     return [schemas.Recipe.model_validate(r) for r in recipes]
 
 
-@router.get(
-    "/search/", response_model=list[schemas.Recipe], operation_id="search_recipes"
-)
+@router.get("/search/", response_model=list[schemas.Recipe], operation_id="search_recipes")
 async def search_recipes(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[Cache, Depends(get_cache)],
-    q: str = Query(
-        ..., description="Search query for recipes using vector search", max_length=200
-    ),
+    q: str = Query(..., description="Search query for recipes using vector search", max_length=200),
     include_ingredients: str | None = Query(
         None, description="Comma-separated ingredients to include", max_length=500
     ),
@@ -179,9 +149,7 @@ async def search_recipes(
     return [schemas.Recipe.model_validate(r) for r in recipes]
 
 
-@router.get(
-    "/{recipe_id}", response_model=schemas.Recipe, operation_id="read_recipe_by_id"
-)
+@router.get("/{recipe_id}", response_model=schemas.Recipe, operation_id="read_recipe_by_id")
 async def read_recipe_by_id(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -189,26 +157,9 @@ async def read_recipe_by_id(
     current_user: Annotated[User | None, Depends(get_current_user_optional)],
     recipe_id: int,
 ) -> schemas.Recipe:
-    key = cache_keys.recipe_detail(recipe_id)
-    cached = await cache.get_model(key, schemas.Recipe)
-    if cached is not None and cached.status == "approved":
-        return cached
-
-    recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    # Non-approved recipes are only visible to owner or moderator/admin
-    if recipe.status != "approved":
-        is_owner = current_user is not None and recipe.owner_id == current_user.id
-        is_mod = current_user is not None and current_user.role in ("moderator", "admin")
-        if not (is_owner or is_mod):
-            raise HTTPException(status_code=404, detail="Recipe not found")
-
-    response = schemas.Recipe.model_validate(recipe)
-    if response.status == "approved":
-        await cache.set_model(key, response, ttl=cache_keys.TTL_RECIPE_DETAIL)
-    return response
+    return await recipe_service.get_recipe_for_caller(
+        db=db, cache=cache, recipe_id=recipe_id, current_user=current_user
+    )
 
 
 @router.get(
@@ -235,11 +186,7 @@ async def read_similar_recipes(
             detail="Embedding model is warming up, please retry in a moment",
         )
     recipes = await recipe_service.get_similar_recipes(
-        db=db,
-        recipe_id=recipe_id,
-        threshold=threshold,
-        limit=limit,
-        cache=cache,
+        db=db, recipe_id=recipe_id, threshold=threshold, limit=limit, cache=cache
     )
     return [schemas.Recipe.model_validate(r) for r in recipes]
 
@@ -257,25 +204,15 @@ async def update_existing_recipe(
     recipe_id: int,
     recipe_in: schemas.RecipeUpdate,
 ) -> schemas.Recipe | schemas.RecipeDraftResponse:
-    db_recipe: models.Recipe | None = await recipe_service.get_recipe_by_id(
-        db=db, recipe_id=recipe_id
-    )
-    if not db_recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    _check_recipe_owner(db_recipe, current_user)
-
     result = await recipe_service.update_recipe(
-        db=db, db_recipe=db_recipe, recipe_in=recipe_in, current_user=current_user
+        db=db,
+        cache=cache,
+        recipe_id=recipe_id,
+        recipe_in=recipe_in,
+        current_user=current_user,
     )
-
-    # If a draft was created (regular user editing), return draft response
     if isinstance(result, models.RecipeDraft):
         return schemas.RecipeDraftResponse.model_validate(result)
-
-    await search_cache.bump_search_version(cache)
-    await similar_cache.bump_similar_version(cache)
-    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return schemas.Recipe.model_validate(result)
 
 
@@ -293,28 +230,17 @@ async def resubmit_recipe(
     recipe_in: schemas.RecipeUpdate,
 ) -> schemas.Recipe:
     """Re-submit a rejected recipe with corrections. Only the owner can resubmit."""
-    db_recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
-    if not db_recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    if db_recipe.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the recipe owner can resubmit")
-
-    if db_recipe.status != "rejected":
-        raise HTTPException(
-            status_code=400, detail="Only rejected recipes can be resubmitted"
-        )
-
     updated = await recipe_service.resubmit_recipe(
-        db=db, db_recipe=db_recipe, recipe_in=recipe_in
+        db=db,
+        cache=cache,
+        recipe_id=recipe_id,
+        recipe_in=recipe_in,
+        current_user=current_user,
     )
-    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return schemas.Recipe.model_validate(updated)
 
 
-@router.delete(
-    "/{recipe_id}", response_model=schemas.Recipe, operation_id="delete_recipe"
-)
+@router.delete("/{recipe_id}", response_model=schemas.Recipe, operation_id="delete_recipe")
 async def delete_existing_recipe(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -322,22 +248,10 @@ async def delete_existing_recipe(
     current_user: Annotated[User, Depends(get_current_user)],
     recipe_id: int,
 ) -> schemas.Recipe:
-    db_recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
-    if not db_recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    _check_recipe_owner(db_recipe, current_user)
-
-    deleted_recipe = await recipe_service.delete_recipe(
-        db=db, recipe_id=recipe_id, deleted_by=current_user
+    deleted = await recipe_service.delete_recipe(
+        db=db, cache=cache, recipe_id=recipe_id, current_user=current_user
     )
-    if not deleted_recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    await search_cache.bump_search_version(cache)
-    await similar_cache.bump_similar_version(cache)
-    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
-    return schemas.Recipe.model_validate(deleted_recipe)
+    return schemas.Recipe.model_validate(deleted)
 
 
 @router.post(
@@ -353,47 +267,13 @@ async def upload_recipe_images(
     recipe_id: int,
     files: Annotated[list[UploadFile], File(...)],
 ) -> schemas.Recipe:
-    recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    _check_recipe_owner(recipe, current_user)
-
-    if len(files) > 5:
-        raise HTTPException(
-            status_code=400, detail="Too many files sent. Max 5 allowed."
-        )
-
-    async def process_file(file: UploadFile) -> tuple[str, str]:
-        valid_content = await image_service.validate_and_process_image(file)
-        original_bytes = valid_content.getvalue()
-
-        # Generate compressed versions
-        versions = image_service.generate_compressed_versions(original_bytes)
-        file_id = str(uuid.uuid4())
-
-        # Upload full version (WebP)
-        full_key = f"recipes/{recipe_id}/{file_id}.webp"
-        full_url = await s3_client.upload_file(versions["full"], full_key, "image/webp")
-
-        # Upload thumbnail (WebP)
-        thumb_key = f"recipes/{recipe_id}/{file_id}_thumb.webp"
-        thumb_url = await s3_client.upload_file(versions["thumb"], thumb_key, "image/webp")
-
-        return full_url, thumb_url
-
-    results = await asyncio.gather(*[process_file(f) for f in files])
-
-    current_urls = list(recipe.image_urls) if recipe.image_urls else []
-    current_thumbs = list(recipe.thumbnail_urls) if recipe.thumbnail_urls else []
-    recipe.image_urls = current_urls + [r[0] for r in results]
-    recipe.thumbnail_urls = current_thumbs + [r[1] for r in results]
-
-    db.add(recipe)
-    await db.commit()
-    await db.refresh(recipe)
-
-    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
+    recipe = await recipe_service.upload_recipe_images(
+        db=db,
+        cache=cache,
+        recipe_id=recipe_id,
+        files=files,
+        current_user=current_user,
+    )
     return schemas.Recipe.model_validate(recipe)
 
 
@@ -410,20 +290,12 @@ async def delete_recipe_images(
     recipe_id: int,
     delete_data: schemas.RecipeImagesDelete,
 ) -> schemas.Recipe:
-    recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    _check_recipe_owner(recipe, current_user)
-
     urls_as_strings = [str(url) for url in delete_data.image_urls]
-
-    updated_recipe = await recipe_service.delete_recipe_images(
-        db=db, recipe_id=recipe_id, urls_to_delete=urls_as_strings
+    updated = await recipe_service.delete_recipe_images(
+        db=db,
+        cache=cache,
+        recipe_id=recipe_id,
+        urls_to_delete=urls_as_strings,
+        current_user=current_user,
     )
-
-    if not updated_recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
-    return schemas.Recipe.model_validate(updated_recipe)
+    return schemas.Recipe.model_validate(updated)

@@ -1,16 +1,14 @@
-import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
 from app.api.deps import get_current_user, require_admin
 from app.core.cache import Cache, get_cache
-from app.core.s3_client import s3_client
 from app.db.session import get_db
 from app.models.user import User
-from app.services import auth_service, cache_keys, image_service, user_service
+from app.services import auth_service, user_service
 
 router = APIRouter()
 
@@ -47,18 +45,7 @@ async def get_user_profile(
     user_id: int,
 ) -> schemas.PublicUserResponse:
     """Get public user profile. Public endpoint."""
-    key = cache_keys.user_profile(user_id)
-    cached = await cache.get_model(key, schemas.PublicUserResponse)
-    if cached is not None:
-        return cached
-
-    profile = await user_service.get_public_profile(db, user_id=user_id)
-    if profile is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    response = schemas.PublicUserResponse(**profile)
-    await cache.set_model(key, response, ttl=cache_keys.TTL_USER_PROFILE)
-    return response
+    return await user_service.get_public_profile_cached(db, user_id=user_id, cache=cache)
 
 
 # --- Current user endpoints (authenticated) ---
@@ -87,20 +74,14 @@ async def update_me(
     current_user: Annotated[User, Depends(get_current_user)],
     body: schemas.UserSelfUpdate,
 ) -> schemas.UserResponse:
-    try:
-        updated = await auth_service.update_user_profile(
-            db,
-            user=current_user,
-            username=body.username,
-            display_name=body.display_name,
-            email=body.email,
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        ) from e
-    await cache_keys.invalidate_on_user_change(cache, user_id=current_user.id)
+    updated = await auth_service.update_user_profile(
+        db,
+        cache=cache,
+        user=current_user,
+        username=body.username,
+        display_name=body.display_name,
+        email=body.email,
+    )
     return schemas.UserResponse.model_validate(updated)
 
 
@@ -117,24 +98,8 @@ async def upload_avatar(
     file: Annotated[UploadFile, File(...)],
 ) -> schemas.UserResponse:
     """Upload or replace user avatar."""
-    valid_content = await image_service.validate_and_process_image(file)
-
-    # Ensure the avatar is in a browser-compatible format (converts HEIC → JPEG, etc.)
-    converted, content_type, extension = image_service.ensure_browser_compatible(
-        valid_content.getvalue()
-    )
-    obj_name = f"avatars/{current_user.id}/{uuid.uuid4()}.{extension}"
-
-    if current_user.avatar_url:
-        await s3_client.delete_image_from_s3(current_user.avatar_url)
-
-    url = await s3_client.upload_file(converted, obj_name, content_type)
-    current_user.avatar_url = url
-    db.add(current_user)
-    await db.commit()
-    await db.refresh(current_user)
-    await cache_keys.invalidate_on_user_change(cache, user_id=current_user.id)
-    return schemas.UserResponse.model_validate(current_user)
+    updated = await user_service.upload_avatar(db, cache=cache, user=current_user, file=file)
+    return schemas.UserResponse.model_validate(updated)
 
 
 @router.post(
@@ -147,18 +112,12 @@ async def change_password(
     current_user: Annotated[User, Depends(get_current_user)],
     body: schemas.PasswordChange,
 ) -> dict[str, str]:
-    try:
-        await auth_service.change_password(
-            db,
-            user=current_user,
-            old_password=body.old_password,
-            new_password=body.new_password,
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+    await auth_service.change_password(
+        db,
+        user=current_user,
+        old_password=body.old_password,
+        new_password=body.new_password,
+    )
     return {"message": "Password changed successfully"}
 
 
@@ -192,9 +151,7 @@ async def get_user(
     _admin: Annotated[User, Depends(require_admin)],
     user_id: int,
 ) -> schemas.UserResponse:
-    user = await user_service.get_user_by_id(db=db, user_id=user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = await user_service.get_user_or_raise(db=db, user_id=user_id)
     return schemas.UserResponse.model_validate(user)
 
 
@@ -211,29 +168,14 @@ async def update_user(
     user_id: int,
     user_in: schemas.UserUpdate,
 ) -> schemas.UserResponse:
-    db_user = await user_service.get_user_by_id(db=db, user_id=user_id)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if db_user.id == admin.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot modify your own account via this endpoint",
-        )
-
-    if db_user.role == "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot modify admin account",
-        )
-
     updated = await user_service.update_user(
         db=db,
-        db_user=db_user,
+        cache=cache,
+        user_id=user_id,
+        admin=admin,
         role=user_in.role,
         is_active=user_in.is_active,
     )
-    await cache_keys.invalidate_on_user_change(cache, user_id=user_id)
     return schemas.UserResponse.model_validate(updated)
 
 
@@ -249,22 +191,5 @@ async def delete_user(
     admin: Annotated[User, Depends(require_admin)],
     user_id: int,
 ) -> schemas.UserResponse:
-    db_user = await user_service.get_user_by_id(db=db, user_id=user_id)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if db_user.id == admin.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete your own account",
-        )
-
-    if db_user.role == "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot delete admin account",
-        )
-
-    deleted = await user_service.delete_user(db=db, db_user=db_user)
-    await cache_keys.invalidate_on_user_change(cache, user_id=user_id)
+    deleted = await user_service.delete_user(db=db, cache=cache, user_id=user_id, admin=admin)
     return schemas.UserResponse.model_validate(deleted)
