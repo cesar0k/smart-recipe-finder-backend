@@ -1,22 +1,14 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
 from app.api.deps import require_moderator
 from app.core.cache import Cache, get_cache
 from app.db.session import get_db
-from app.models.recipe_draft import RecipeDraft
 from app.models.user import User
-from app.services import (
-    cache_keys,
-    moderation_log_service,
-    moderation_service,
-    recipe_service,
-    search_cache,
-    similar_cache,
-)
+from app.services import moderation_log_service, moderation_service
 
 router = APIRouter()
 
@@ -32,15 +24,7 @@ async def get_pending_count(
     cache: Annotated[Cache, Depends(get_cache)],
     _mod: Annotated[User, Depends(require_moderator)],
 ) -> schemas.PendingCountResponse:
-    key = cache_keys.pending_count()
-    cached = await cache.get_model(key, schemas.PendingCountResponse)
-    if cached is not None:
-        return cached
-
-    counts = await moderation_service.get_pending_counts(db)
-    response = schemas.PendingCountResponse(**counts)
-    await cache.set_model(key, response, ttl=cache_keys.TTL_PENDING_COUNT)
-    return response
+    return await moderation_service.get_pending_count_cached(db, cache=cache)
 
 
 @router.get(
@@ -119,32 +103,14 @@ async def moderate_recipe(
     recipe_id: int,
     body: schemas.ModerationAction,
 ) -> schemas.Recipe:
-    recipe = await recipe_service.get_recipe_by_id(db=db, recipe_id=recipe_id)
-    if recipe is None:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    if recipe.status != "pending":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Recipe is already '{recipe.status}', not pending",
-        )
-
-    if body.action == "reject" and not body.rejection_reason:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Rejection reason is required",
-        )
-
     updated = await moderation_service.moderate_recipe(
         db,
-        recipe=recipe,
+        cache=cache,
+        recipe_id=recipe_id,
         action=body.action,
         moderator_id=mod.id,
         rejection_reason=body.rejection_reason,
     )
-    await search_cache.bump_search_version(cache)
-    await similar_cache.bump_similar_version(cache)
-    await cache_keys.invalidate_on_moderation(cache, recipe_id=recipe.id)
     return schemas.Recipe.model_validate(updated)
 
 
@@ -175,36 +141,12 @@ async def moderate_draft(
     draft_id: int,
     body: schemas.ModerationAction,
 ) -> schemas.RecipeDraftResponse:
-    from sqlalchemy.future import select
-
-    result = await db.execute(
-        select(RecipeDraft).where(RecipeDraft.id == draft_id)
-    )
-    draft = result.scalar_one_or_none()
-
-    if draft is None:
-        raise HTTPException(status_code=404, detail="Draft not found")
-
-    if draft.status != "pending":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Draft is already '{draft.status}', not pending",
-        )
-
-    if body.action == "reject" and not body.rejection_reason:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Rejection reason is required",
-        )
-
     updated = await moderation_service.moderate_draft(
         db,
-        draft=draft,
+        cache=cache,
+        draft_id=draft_id,
         action=body.action,
         moderator_id=mod.id,
         rejection_reason=body.rejection_reason,
     )
-    await search_cache.bump_search_version(cache)
-    await similar_cache.bump_similar_version(cache)
-    await cache_keys.invalidate_on_moderation(cache, recipe_id=draft.recipe_id)
     return schemas.RecipeDraftResponse.model_validate(updated)
