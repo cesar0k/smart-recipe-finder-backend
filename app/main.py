@@ -4,13 +4,21 @@ import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.api.v1.api import api_router
 from app.core.cache import close_redis, init_redis
 from app.core.config import settings
+from app.core.exceptions import (
+    InvalidCredentialsError,
+    InvalidStateError,
+    NotAuthorizedError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.s3_client import s3_client
 from app.core.vector_store import vector_store
 
@@ -47,6 +55,35 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(NotFoundError)
+async def _not_found_handler(_request: Request, exc: NotFoundError) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc) or "Not found"})
+
+
+@app.exception_handler(NotAuthorizedError)
+async def _forbidden_handler(_request: Request, exc: NotAuthorizedError) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"detail": str(exc) or "Forbidden"})
+
+
+@app.exception_handler(InvalidStateError)
+async def _conflict_handler(_request: Request, exc: InvalidStateError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc) or "Bad request"})
+
+
+@app.exception_handler(ValidationError)
+async def _validation_handler(_request: Request, exc: ValidationError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc) or "Validation error"})
+
+
+@app.exception_handler(InvalidCredentialsError)
+async def _unauthorized_handler(_request: Request, exc: InvalidCredentialsError) -> JSONResponse:
+    return JSONResponse(
+        status_code=401,
+        content={"detail": str(exc) or "Invalid credentials"},
+    )
+
 
 app.include_router(api_router, prefix="/api/v1")
 
