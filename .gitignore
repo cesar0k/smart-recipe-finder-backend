@@ -221,3 +221,8 @@ __marimo__/
 
 # Seed script with with local image uploads (just for me)
 recipe_photos/
+
+# One-off dataset/image generation scripts (require paid API keys, not for public use)
+scripts/build_recipe_dataset.py
+scripts/generate_recipe_photos.py
+scripts/calibrate_thresholds.py
