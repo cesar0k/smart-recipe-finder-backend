@@ -1,6 +1,6 @@
 from typing import Annotated, Any
 
-from pydantic import Field, HttpUrl, StringConstraints, field_validator, ConfigDict
+from pydantic import ConfigDict, Field, HttpUrl, StringConstraints, field_validator
 
 from .ingredient import Ingredient
 from .recipe_base import RecipeBase

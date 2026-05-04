@@ -99,7 +99,7 @@ async def update_me(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
-        )
+        ) from e
     await cache_keys.invalidate_on_user_change(cache, user_id=current_user.id)
     return schemas.UserResponse.model_validate(updated)
 
@@ -158,7 +158,7 @@ async def change_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
     return {"message": "Password changed successfully"}
 
 

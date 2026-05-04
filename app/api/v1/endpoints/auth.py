@@ -40,7 +40,7 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
-        )
+        ) from e
     return schemas.UserResponse.model_validate(user)
 
 
@@ -71,9 +71,7 @@ async def login(
             detail="User account is deactivated",
         )
 
-    access_token, refresh_token = await auth_service.create_token_pair(
-        db, user=user
-    )
+    access_token, refresh_token = await auth_service.create_token_pair(db, user=user)
     return schemas.TokenPair(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -91,14 +89,12 @@ async def refresh(
     body: schemas.RefreshRequest,
 ) -> schemas.TokenPair:
     try:
-        result = await auth_service.refresh_tokens(
-            db, refresh_token_str=body.refresh_token
-        )
-    except DeactivatedUserError:
+        result = await auth_service.refresh_tokens(db, refresh_token_str=body.refresh_token)
+    except DeactivatedUserError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is deactivated",
-        )
+        ) from e
 
     if result is None:
         raise HTTPException(
@@ -145,11 +141,9 @@ async def google_auth(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
-        )
+        ) from e
 
-    user = await authenticate_or_create_google_user(
-        db, google_user_info=google_user_info
-    )
+    user = await authenticate_or_create_google_user(db, google_user_info=google_user_info)
 
     if not user.is_active:
         raise HTTPException(
@@ -157,9 +151,7 @@ async def google_auth(
             detail="User account is deactivated",
         )
 
-    access_token, refresh_token = await auth_service.create_token_pair(
-        db, user=user
-    )
+    access_token, refresh_token = await auth_service.create_token_pair(db, user=user)
     return schemas.TokenPair(
         access_token=access_token,
         refresh_token=refresh_token,
