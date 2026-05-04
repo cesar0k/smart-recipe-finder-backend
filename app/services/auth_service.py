@@ -3,7 +3,14 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.core.cache import Cache
 from app.core.config import settings
+from app.core.exceptions import (
+    InvalidCredentialsError,
+    InvalidStateError,
+    NotAuthorizedError,
+    ValidationError,
+)
 from app.core.security import (
     create_access_token,
     create_refresh_token_value,
@@ -12,6 +19,7 @@ from app.core.security import (
 )
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
+from app.services import cache_keys
 from app.services.user_service import (
     get_user_by_email,
     get_user_by_username,
@@ -28,15 +36,15 @@ async def register_user(
 ) -> User:
     """Create a new user with hashed password.
 
-    Raises ValueError if email or username already taken.
+    Raises ValidationError if email or username already taken.
     """
     existing = await get_user_by_email(db, email=email)
     if existing:
-        raise ValueError("Email already registered")
+        raise ValidationError("Email already registered")
 
     existing = await get_user_by_username(db, username=username)
     if existing:
-        raise ValueError("Username already taken")
+        raise ValidationError("Username already taken")
 
     user = User(
         email=email,
@@ -80,9 +88,7 @@ async def create_token_pair(
     access_token = create_access_token(user.id, user.role)
 
     refresh_value = create_refresh_token_value()
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-    )
+    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
     db_refresh = RefreshToken(
         user_id=user.id,
@@ -95,10 +101,8 @@ async def create_token_pair(
     return access_token, refresh_value
 
 
-class DeactivatedUserError(Exception):
-    """Raised when refresh is attempted for a deactivated user."""
-
-    pass
+class DeactivatedUserError(NotAuthorizedError):
+    """Raised when an action is attempted for a deactivated user (HTTP 403)."""
 
 
 async def refresh_tokens(
@@ -107,9 +111,7 @@ async def refresh_tokens(
     refresh_token_str: str,
 ) -> tuple[str, str] | None:
     """Validate refresh token, rotate it, return new pair."""
-    result = await db.execute(
-        select(RefreshToken).where(RefreshToken.token == refresh_token_str)
-    )
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token == refresh_token_str))
     db_token = result.scalar_one_or_none()
 
     if db_token is None:
@@ -120,9 +122,7 @@ async def refresh_tokens(
         await db.commit()
         return None
 
-    user_result = await db.execute(
-        select(User).where(User.id == db_token.user_id)
-    )
+    user_result = await db.execute(select(User).where(User.id == db_token.user_id))
     user = user_result.scalar_one_or_none()
 
     if user is None:
@@ -141,15 +141,47 @@ async def refresh_tokens(
     return await create_token_pair(db, user=user)
 
 
+async def login(
+    db: AsyncSession,
+    *,
+    login: str,
+    password: str,
+) -> tuple[str, str]:
+    """Authenticate by email/username + password and return token pair.
+
+    Raises InvalidCredentialsError or DeactivatedUserError.
+    """
+    user = await authenticate_user(db, login=login, password=password)
+    if user is None:
+        raise InvalidCredentialsError("Invalid email or password")
+    if not user.is_active:
+        raise DeactivatedUserError("User account is deactivated")
+    return await create_token_pair(db, user=user)
+
+
+async def rotate_refresh_token(
+    db: AsyncSession,
+    *,
+    refresh_token_str: str,
+) -> tuple[str, str]:
+    """Validate and rotate refresh token.
+
+    Raises InvalidCredentialsError on missing/expired token,
+    DeactivatedUserError when the underlying user is inactive.
+    """
+    pair = await refresh_tokens(db, refresh_token_str=refresh_token_str)
+    if pair is None:
+        raise InvalidCredentialsError("Invalid or expired refresh token")
+    return pair
+
+
 async def logout(
     db: AsyncSession,
     *,
     refresh_token_str: str,
 ) -> bool:
     """Delete refresh token from DB."""
-    result = await db.execute(
-        select(RefreshToken).where(RefreshToken.token == refresh_token_str)
-    )
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token == refresh_token_str))
     db_token = result.scalar_one_or_none()
 
     if db_token is None:
@@ -167,26 +199,33 @@ async def update_user_profile(
     username: str | None = None,
     display_name: str | None = None,
     email: str | None = None,
+    cache: Cache | None = None,
 ) -> User:
-    """Update the current user's profile (self-edit)."""
+    """Update the current user's profile (self-edit).
+
+    Raises ValidationError on username / email collision.
+    """
     if display_name is not None:
         user.display_name = display_name
 
     if username is not None and username != user.username:
         existing = await get_user_by_username(db, username=username)
         if existing and existing.id != user.id:
-            raise ValueError("Username already taken")
+            raise ValidationError("Username already taken")
         user.username = username
 
     if email is not None and email != user.email:
         existing = await get_user_by_email(db, email=email)
         if existing and existing.id != user.id:
-            raise ValueError("Email already registered")
+            raise ValidationError("Email already registered")
         user.email = email
 
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    if cache is not None:
+        await cache_keys.invalidate_on_user_change(cache, user_id=user.id)
     return user
 
 
@@ -197,15 +236,19 @@ async def change_password(
     old_password: str,
     new_password: str,
 ) -> bool:
-    """Change password for local auth users. Returns True on success."""
+    """Change password for local auth users. Returns True on success.
+
+    Raises InvalidStateError when user has no local-auth password or
+    old password is wrong.
+    """
     if user.auth_provider != "local":
-        raise ValueError("password_change_not_available")
+        raise InvalidStateError("password_change_not_available")
 
     if user.hashed_password is None:
-        raise ValueError("password_not_set")
+        raise InvalidStateError("password_not_set")
 
     if not verify_password(old_password, user.hashed_password):
-        raise ValueError("password_incorrect")
+        raise InvalidStateError("password_incorrect")
 
     user.hashed_password = hash_password(new_password)
     db.add(user)

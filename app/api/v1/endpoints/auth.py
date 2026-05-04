@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
+from app.core.exceptions import InvalidCredentialsError
 from app.db.session import get_db
 from app.services import auth_service
 from app.services.auth_service import DeactivatedUserError
@@ -28,19 +29,13 @@ async def register(
     db: Annotated[AsyncSession, Depends(get_db)],
     user_in: schemas.UserCreate,
 ) -> schemas.UserResponse:
-    try:
-        user = await auth_service.register_user(
-            db,
-            email=user_in.email,
-            username=user_in.username,
-            display_name=user_in.display_name,
-            password=user_in.password,
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        ) from e
+    user = await auth_service.register_user(
+        db,
+        email=user_in.email,
+        username=user_in.username,
+        display_name=user_in.display_name,
+        password=user_in.password,
+    )
     return schemas.UserResponse.model_validate(user)
 
 
@@ -54,28 +49,10 @@ async def login(
     db: Annotated[AsyncSession, Depends(get_db)],
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ) -> schemas.TokenPair:
-    user = await auth_service.authenticate_user(
-        db,
-        login=form_data.username,
-        password=form_data.password,
+    access_token, refresh_token = await auth_service.login(
+        db, login=form_data.username, password=form_data.password
     )
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is deactivated",
-        )
-
-    access_token, refresh_token = await auth_service.create_token_pair(db, user=user)
-    return schemas.TokenPair(
-        access_token=access_token,
-        refresh_token=refresh_token,
-    )
+    return schemas.TokenPair(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post(
@@ -88,25 +65,10 @@ async def refresh(
     db: Annotated[AsyncSession, Depends(get_db)],
     body: schemas.RefreshRequest,
 ) -> schemas.TokenPair:
-    try:
-        result = await auth_service.refresh_tokens(db, refresh_token_str=body.refresh_token)
-    except DeactivatedUserError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is deactivated",
-        ) from e
-
-    if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token",
-        )
-
-    access_token, refresh_token = result
-    return schemas.TokenPair(
-        access_token=access_token,
-        refresh_token=refresh_token,
+    access_token, refresh_token = await auth_service.rotate_refresh_token(
+        db, refresh_token_str=body.refresh_token
     )
+    return schemas.TokenPair(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post(
@@ -138,21 +100,12 @@ async def google_auth(
             code=body.code, redirect_uri=body.redirect_uri
         )
     except GoogleAuthError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-        ) from e
+        raise InvalidCredentialsError(str(e)) from e
 
     user = await authenticate_or_create_google_user(db, google_user_info=google_user_info)
 
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is deactivated",
-        )
+        raise DeactivatedUserError("User account is deactivated")
 
     access_token, refresh_token = await auth_service.create_token_pair(db, user=user)
-    return schemas.TokenPair(
-        access_token=access_token,
-        refresh_token=refresh_token,
-    )
+    return schemas.TokenPair(access_token=access_token, refresh_token=refresh_token)
