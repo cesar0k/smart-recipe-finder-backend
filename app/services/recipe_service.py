@@ -1,8 +1,12 @@
+import asyncio
+import json
 import re
+import uuid
 from collections.abc import Sequence
 from typing import Any
 from typing import cast as t_cast
 
+from fastapi import UploadFile
 from sqlalchemy import String, distinct, func, not_, or_
 from sqlalchemy import cast as sa_cast
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +14,13 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.selectable import Select
 
+from app import schemas
 from app.core.cache import Cache
+from app.core.exceptions import (
+    InvalidStateError,
+    NotAuthorizedError,
+    NotFoundError,
+)
 from app.core.s3_client import s3_client
 from app.core.text_utils import get_word_forms
 from app.core.vector_store import vector_store
@@ -18,7 +28,7 @@ from app.models import Recipe
 from app.models.recipe_draft import RecipeDraft
 from app.models.user import User
 from app.schemas import RecipeCreate, RecipeUpdate
-from app.services import search_cache, similar_cache
+from app.services import cache_keys, image_service, search_cache, similar_cache
 
 __all__ = [
     "create_recipe",
@@ -35,6 +45,23 @@ __all__ = [
 def _with_owner(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
     """Add selectinload for owner relationship."""
     return query.options(selectinload(Recipe.owner))
+
+
+def _ensure_can_modify(recipe: Recipe, user: User) -> None:
+    """Raise NotAuthorizedError unless user is owner / moderator / admin."""
+    if user.role in ("moderator", "admin"):
+        return
+    if recipe.owner_id != user.id:
+        raise NotAuthorizedError("Not authorized to modify this recipe")
+
+
+async def _bump_recipe_caches(cache: Cache | None, *, recipe_id: int | None = None) -> None:
+    """Invalidate all recipe-related caches after a write."""
+    if cache is None:
+        return
+    await search_cache.bump_search_version(cache)
+    await similar_cache.bump_similar_version(cache)
+    await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
 
 
 def _create_semantic_document(recipe: Recipe) -> tuple[str, dict[str, Any]]:
@@ -150,11 +177,27 @@ async def get_distinct_cuisines(db: AsyncSession) -> list[str]:
     return [row[0] for row in result.all()]
 
 
+async def get_distinct_cuisines_cached(db: AsyncSession, cache: Cache | None = None) -> list[str]:
+    """Read-through cache wrapper around get_distinct_cuisines."""
+    if cache is None:
+        return await get_distinct_cuisines(db)
+
+    key = cache_keys.cuisines()
+    cached = await cache.get_raw(key)
+    if cached is not None:
+        return list(json.loads(cached))
+
+    result = await get_distinct_cuisines(db)
+    await cache.set_raw(key, json.dumps(result), ttl=cache_keys.TTL_CUISINES)
+    return result
+
+
 async def create_recipe(
     db: AsyncSession,
     *,
     recipe_in: RecipeCreate,
     current_user: User,
+    cache: Cache | None = None,
 ) -> Recipe:
     recipe_data = recipe_in.model_dump(exclude={"ingredients"})
     json_ingredients = [{"name": name} for name in recipe_in.ingredients]
@@ -204,6 +247,7 @@ async def create_recipe(
             )
             await db.commit()
 
+    await _bump_recipe_caches(cache)
     return db_recipe
 
 
@@ -222,9 +266,13 @@ async def get_all_recipes(
     """Public feed — only approved recipes. Always."""
     query = _with_owner(select(Recipe).where(Recipe.status == "approved"))
     query = _apply_filters(
-        query, include_str, exclude_str,
-        min_time=min_time, max_time=max_time,
-        difficulty=difficulty, cuisine=cuisine,
+        query,
+        include_str,
+        exclude_str,
+        min_time=min_time,
+        max_time=max_time,
+        difficulty=difficulty,
+        cuisine=cuisine,
     )
     query = query.order_by(Recipe.id.desc())
     query = query.offset(skip).limit(limit)
@@ -245,9 +293,7 @@ async def get_user_recipes(
     base = select(Recipe).where(Recipe.owner_id == user_id)
     if approved_only:
         base = base.where(Recipe.status == "approved")
-    query = _with_owner(
-        base.order_by(Recipe.id.desc()).offset(skip).limit(limit)
-    )
+    query = _with_owner(base.order_by(Recipe.id.desc()).offset(skip).limit(limit))
     result = await db.execute(query)
     recipes = result.scalars().all()
 
@@ -269,6 +315,63 @@ async def get_user_recipes(
     return recipes
 
 
+async def get_user_recipes_for_caller(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    viewer: User | None,
+    skip: int = 0,
+    limit: int = 100,
+) -> Sequence[Recipe]:
+    """Public 'view a user's recipes' flow.
+
+    Moderators/admins see all statuses; everyone else sees only approved.
+    """
+    is_privileged = viewer is not None and viewer.role in ("moderator", "admin")
+    return await get_user_recipes(
+        db=db,
+        user_id=user_id,
+        skip=skip,
+        limit=limit,
+        approved_only=not is_privileged,
+    )
+
+
+async def get_recipe_for_caller(
+    db: AsyncSession,
+    *,
+    recipe_id: int,
+    current_user: User | None,
+    cache: Cache | None = None,
+) -> schemas.Recipe:
+    """Public read flow used by GET /recipes/{id}.
+
+    - Approved recipes are cached and visible to everyone.
+    - Non-approved recipes are visible only to owner / mod / admin and never cached.
+    - Raises NotFoundError when missing or not visible.
+    """
+    key = cache_keys.recipe_detail(recipe_id)
+    if cache is not None:
+        cached = await cache.get_model(key, schemas.Recipe)
+        if cached is not None and cached.status == "approved":
+            return cached
+
+    recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if recipe is None:
+        raise NotFoundError("Recipe not found")
+
+    if recipe.status != "approved":
+        is_owner = current_user is not None and recipe.owner_id == current_user.id
+        is_mod = current_user is not None and current_user.role in ("moderator", "admin")
+        if not (is_owner or is_mod):
+            raise NotFoundError("Recipe not found")
+
+    response = schemas.Recipe.model_validate(recipe)
+    if response.status == "approved" and cache is not None:
+        await cache.set_model(key, response, ttl=cache_keys.TTL_RECIPE_DETAIL)
+    return response
+
+
 async def get_recipe_by_id(db: AsyncSession, *, recipe_id: int) -> Recipe | None:
     query = _with_owner(select(Recipe).where(Recipe.id == recipe_id))
     result = await db.execute(query)
@@ -278,21 +381,31 @@ async def get_recipe_by_id(db: AsyncSession, *, recipe_id: int) -> Recipe | None
 async def update_recipe(
     db: AsyncSession,
     *,
-    db_recipe: Recipe,
+    recipe_id: int,
     recipe_in: RecipeUpdate,
     current_user: User,
+    cache: Cache | None = None,
 ) -> Recipe | RecipeDraft:
     """Update a recipe.
 
     - Moderator/admin: update directly.
     - Regular user (owner): create a draft instead.
+
+    Raises NotFoundError if missing, NotAuthorizedError if caller can't modify.
     """
+    db_recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if db_recipe is None:
+        raise NotFoundError("Recipe not found")
+    _ensure_can_modify(db_recipe, current_user)
+
     if current_user.role in ("moderator", "admin"):
-        return await _update_recipe_directly(db, db_recipe=db_recipe, recipe_in=recipe_in)
-    else:
-        return await _create_draft(
-            db, db_recipe=db_recipe, recipe_in=recipe_in, author=current_user
+        result: Recipe | RecipeDraft = await _update_recipe_directly(
+            db, db_recipe=db_recipe, recipe_in=recipe_in
         )
+        await _bump_recipe_caches(cache, recipe_id=recipe_id)
+        return result
+
+    return await _create_draft(db, db_recipe=db_recipe, recipe_in=recipe_in, author=current_user)
 
 
 async def _update_recipe_directly(
@@ -408,10 +521,24 @@ async def _create_draft(
 async def resubmit_recipe(
     db: AsyncSession,
     *,
-    db_recipe: Recipe,
+    recipe_id: int,
     recipe_in: RecipeUpdate,
+    current_user: User,
+    cache: Cache | None = None,
 ) -> Recipe:
-    """Re-submit a rejected recipe with corrections. Sets status back to pending."""
+    """Re-submit a rejected recipe with corrections.
+
+    Only the owner can resubmit, and only a rejected recipe.
+    Raises NotFoundError, NotAuthorizedError, or InvalidStateError.
+    """
+    db_recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if db_recipe is None:
+        raise NotFoundError("Recipe not found")
+    if db_recipe.owner_id != current_user.id:
+        raise NotAuthorizedError("Only the recipe owner can resubmit")
+    if db_recipe.status != "rejected":
+        raise InvalidStateError("Only rejected recipes can be resubmitted")
+
     update_data = recipe_in.model_dump(exclude_unset=True)
 
     # Exclude image_urls — managed separately
@@ -452,6 +579,8 @@ async def resubmit_recipe(
         )
         await db.commit()
 
+    if cache is not None:
+        await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return db_recipe
 
 
@@ -459,35 +588,41 @@ async def delete_recipe(
     db: AsyncSession,
     *,
     recipe_id: int,
-    deleted_by: User | None = None,
-) -> Recipe | None:
+    current_user: User,
+    cache: Cache | None = None,
+) -> Recipe:
+    """Delete a recipe.
+
+    Raises NotFoundError if missing, NotAuthorizedError if caller can't modify.
+    Returns the deleted recipe (detached) for response purposes.
+    """
     db_recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
-    if db_recipe:
-        # Notify owner if recipe is deleted by a mod/admin (not the owner)
-        owner_id = db_recipe.owner_id
-        title = db_recipe.title
-        is_mod_delete = (
-            deleted_by is not None
-            and deleted_by.role in ("moderator", "admin")
-            and deleted_by.id != owner_id
+    if db_recipe is None:
+        raise NotFoundError("Recipe not found")
+    _ensure_can_modify(db_recipe, current_user)
+
+    # Notify owner if recipe is deleted by a mod/admin (not the owner)
+    owner_id = db_recipe.owner_id
+    title = db_recipe.title
+    is_mod_delete = current_user.role in ("moderator", "admin") and current_user.id != owner_id
+
+    await db.delete(db_recipe)
+
+    if is_mod_delete and owner_id is not None:
+        from app.services import notification_service
+
+        await notification_service.notify_and_broadcast(
+            db,
+            user_id=owner_id,
+            type="recipe_deleted",
+            title=title,
+            message="",
+            recipe_id=None,  # recipe is deleted, no link
         )
 
-        await db.delete(db_recipe)
-
-        if is_mod_delete and owner_id is not None:
-            from app.services import notification_service
-
-            await notification_service.notify_and_broadcast(
-                db,
-                user_id=owner_id,
-                type="recipe_deleted",
-                title=title,
-                message="",
-                recipe_id=None,  # recipe is deleted, no link
-            )
-
-        await db.commit()
-        await vector_store.delete_recipe(recipe_id)
+    await db.commit()
+    await vector_store.delete_recipe(recipe_id)
+    await _bump_recipe_caches(cache, recipe_id=recipe_id)
     return db_recipe
 
 
@@ -503,11 +638,21 @@ def _derive_thumb_url(full_url: str) -> str:
 
 
 async def delete_recipe_images(
-    db: AsyncSession, *, recipe_id: int, urls_to_delete: list[str]
-) -> Recipe | None:
+    db: AsyncSession,
+    *,
+    recipe_id: int,
+    urls_to_delete: list[str],
+    current_user: User,
+    cache: Cache | None = None,
+) -> Recipe:
+    """Remove images from a recipe.
+
+    Raises NotFoundError if missing, NotAuthorizedError if caller can't modify.
+    """
     db_recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
-    if not db_recipe:
-        return None
+    if db_recipe is None:
+        raise NotFoundError("Recipe not found")
+    _ensure_can_modify(db_recipe, current_user)
 
     current_urls = set(db_recipe.image_urls) if db_recipe.image_urls else set()
     target_urls = set(urls_to_delete)
@@ -534,6 +679,59 @@ async def delete_recipe_images(
         await s3_client.delete_image_from_s3(url)
         await s3_client.delete_image_from_s3(_derive_thumb_url(url))
 
+    if cache is not None:
+        await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
+    return db_recipe
+
+
+async def upload_recipe_images(
+    db: AsyncSession,
+    *,
+    recipe_id: int,
+    files: list[UploadFile],
+    current_user: User,
+    cache: Cache | None = None,
+    max_files: int = 5,
+) -> Recipe:
+    """Validate, compress and upload recipe images to S3, then attach the URLs.
+
+    Raises NotFoundError if missing, NotAuthorizedError if caller can't modify,
+    InvalidStateError if too many files.
+    """
+    db_recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if db_recipe is None:
+        raise NotFoundError("Recipe not found")
+    _ensure_can_modify(db_recipe, current_user)
+
+    if len(files) > max_files:
+        raise InvalidStateError(f"Too many files sent. Max {max_files} allowed.")
+
+    async def _process_file(file: UploadFile) -> tuple[str, str]:
+        valid_content = await image_service.validate_and_process_image(file)
+        original_bytes = valid_content.getvalue()
+        versions = image_service.generate_compressed_versions(original_bytes)
+        file_id = str(uuid.uuid4())
+
+        full_key = f"recipes/{recipe_id}/{file_id}.webp"
+        full_url = await s3_client.upload_file(versions["full"], full_key, "image/webp")
+
+        thumb_key = f"recipes/{recipe_id}/{file_id}_thumb.webp"
+        thumb_url = await s3_client.upload_file(versions["thumb"], thumb_key, "image/webp")
+        return full_url, thumb_url
+
+    results = await asyncio.gather(*[_process_file(f) for f in files])
+
+    current_urls = list(db_recipe.image_urls) if db_recipe.image_urls else []
+    current_thumbs = list(db_recipe.thumbnail_urls) if db_recipe.thumbnail_urls else []
+    db_recipe.image_urls = current_urls + [r[0] for r in results]
+    db_recipe.thumbnail_urls = current_thumbs + [r[1] for r in results]
+
+    db.add(db_recipe)
+    await db.commit()
+    await db.refresh(db_recipe)
+
+    if cache is not None:
+        await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
     return db_recipe
 
 
@@ -570,9 +768,13 @@ async def search_recipes_by_vector(
     )
 
     query = _apply_filters(
-        query, include_str, exclude_str,
-        min_time=min_time, max_time=max_time,
-        difficulty=difficulty, cuisine=cuisine,
+        query,
+        include_str,
+        exclude_str,
+        min_time=min_time,
+        max_time=max_time,
+        difficulty=difficulty,
+        cuisine=cuisine,
     )
 
     result = await db.execute(query)
