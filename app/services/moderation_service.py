@@ -25,9 +25,7 @@ async def get_pending_recipes(db: AsyncSession) -> Sequence[Recipe]:
 
 async def get_pending_drafts(db: AsyncSession) -> Sequence[RecipeDraft]:
     query = (
-        select(RecipeDraft)
-        .where(RecipeDraft.status == "pending")
-        .order_by(RecipeDraft.id.desc())
+        select(RecipeDraft).where(RecipeDraft.status == "pending").order_by(RecipeDraft.id.desc())
     )
     result = await db.execute(query)
     return result.scalars().all()
@@ -36,9 +34,7 @@ async def get_pending_drafts(db: AsyncSession) -> Sequence[RecipeDraft]:
 async def get_pending_counts(db: AsyncSession) -> dict[str, int]:
     """Return counts of pending recipes and drafts."""
     recipe_q = select(sa_func.count(Recipe.id)).where(Recipe.status == "pending")
-    draft_q = select(sa_func.count(RecipeDraft.id)).where(
-        RecipeDraft.status == "pending"
-    )
+    draft_q = select(sa_func.count(RecipeDraft.id)).where(RecipeDraft.status == "pending")
 
     recipe_result = await db.execute(recipe_q)
     draft_result = await db.execute(draft_q)
@@ -158,9 +154,7 @@ async def moderate_draft(
 ) -> RecipeDraft:
     """Approve or reject a draft."""
     if action == "approve":
-        result = await db.execute(
-            select(Recipe).where(Recipe.id == draft.recipe_id)
-        )
+        result = await db.execute(select(Recipe).where(Recipe.id == draft.recipe_id))
         recipe = result.scalar_one_or_none()
 
         if recipe is None:
@@ -186,7 +180,7 @@ async def moderate_draft(
             full_text=text,
             metadata=meta,
         )
-        
+
         draft.status = "approved"
         db.add(draft)
 

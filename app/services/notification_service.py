@@ -2,10 +2,9 @@ import logging
 from collections.abc import Sequence
 from typing import cast
 
-from sqlalchemy import CursorResult
+from sqlalchemy import CursorResult, update
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func as sa_func
-from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -21,10 +20,13 @@ async def _ws_notify_user(user_id: int, notif: Notification) -> None:
         from app.core.ws_manager import ws_manager
 
         notif_data = NotificationResponse.model_validate(notif).model_dump(mode="json")
-        await ws_manager.send_to_user(user_id, {
-            "type": "new_notification",
-            "notification": notif_data,
-        })
+        await ws_manager.send_to_user(
+            user_id,
+            {
+                "type": "new_notification",
+                "notification": notif_data,
+            },
+        )
     except Exception:
         logger.debug("WS notify failed for user_id=%d (may not be connected)", user_id)
 
@@ -34,12 +36,15 @@ async def _ws_notify_users(user_ids: list[int], notifications: list[Notification
     try:
         from app.core.ws_manager import ws_manager
 
-        for uid, notif in zip(user_ids, notifications):
+        for uid, notif in zip(user_ids, notifications, strict=True):
             notif_data = NotificationResponse.model_validate(notif).model_dump(mode="json")
-            await ws_manager.send_to_user(uid, {
-                "type": "new_notification",
-                "notification": notif_data,
-            })
+            await ws_manager.send_to_user(
+                uid,
+                {
+                    "type": "new_notification",
+                    "notification": notif_data,
+                },
+            )
     except Exception:
         logger.debug("WS bulk notify failed")
 
@@ -154,9 +159,7 @@ async def mark_all_read(db: AsyncSession, *, user_id: int) -> int:
     return result.rowcount
 
 
-async def delete_notification(
-    db: AsyncSession, *, notification_id: int, user_id: int
-) -> bool:
+async def delete_notification(db: AsyncSession, *, notification_id: int, user_id: int) -> bool:
     """Delete a single notification. Returns True if deleted."""
     result = await db.execute(
         select(Notification).where(
