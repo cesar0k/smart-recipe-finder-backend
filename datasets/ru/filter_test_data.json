@@ -1,507 +1,581 @@
-
 [
   {
     "id": 1,
-    "description": "ЛОВУШКА: Включить 'лед'. Должен найти Лимонад. НЕ должен находить 'Рис' (Суши, Ризотто) или 'Сок' (инструкции к Гуакамоле).",
-    "include_ingredients": "лед",
+    "description": "TRAP: \"bee\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "bee",
     "exclude_ingredients": "",
-    "should_contain": [
-      "Лимонад"
-    ],
+    "should_contain": [],
     "should_not_contain": [
-      "Японские суши-роллы (маки)",
-      "Грибное ризотто",
-      "Соус гуакамоле"
+      "Marshall Field Sandwich",
+      "\"Snick Snack\"",
+      "Borscht(Russian Beef, Vegetable Soup)"
     ]
   },
   {
     "id": 2,
-    "description": "ЛОВУШКА: Исключить 'лед'. НЕ должен удалять блюда с 'рисом'.",
-    "include_ingredients": "",
-    "exclude_ingredients": "лед",
-    "should_contain": [
-      "Грибное ризотто",
-      "Японские суши-роллы (маки)"
-    ],
+    "description": "TRAP: \"pot\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "pot",
+    "exclude_ingredients": "",
+    "should_contain": [],
     "should_not_contain": [
-      "Лимонад"
+      "Pleasing Potato Pancakes",
+      "Potato Pancakes With Cheddar",
+      "Vegetable Latkes"
     ]
   },
   {
     "id": 3,
-    "description": "ЛОВУШКА: Включить 'орех'. Должен найти НИЧЕГО (арахис, кокос, мускатный орех являются подстроками). Наивный поиск находит их.",
-    "include_ingredients": "орех",
+    "description": "TRAP: \"chi\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "chi",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Высокобелковый смузи после тренировки",
-      "Острый тайский зеленый карри",
-      "Вегетарианский картофельный гратен с сыром"
+      "Vegetable Latkes",
+      "Curry Chutney Chicken Salad",
+      "Easy Russian Chicken"
     ]
   },
   {
     "id": 4,
-    "description": "ЛОВУШКА: Включить 'горох'. Должен найти НИЧЕГО. Наивный находит 'Арахис'.",
-    "include_ingredients": "горох",
+    "description": "TRAP: \"mus\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "mus",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Высокобелковый смузи после тренировки"
+      "Barley Soup(Ukrainian)",
+      "Poppy Seed Hamwiches",
+      "Mushroom Salad Italiano"
     ]
   },
   {
     "id": 5,
-    "description": "ЛОВУШКА: Включить 'он'. Наивный находит лук(OniON), лимон(LemON), лосось(SalmON), бекон(BacON), корица(CinnamON).",
-    "include_ingredients": "он",
+    "description": "TRAP: \"car\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "car",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Веганский чечевичный бургер",
-      "Лимонад",
-      "Японские суши-роллы (маки)",
-      "Овсянка с медом"
+      "Vegetable Latkes",
+      "Barley Soup(Ukrainian)",
+      "Borscht(Russian Beef, Vegetable Soup)"
     ]
   },
   {
     "id": 6,
-    "description": "ЛОВУШКА: Исключить 'масло'. Должен удалить Рыбу с картошкой фри и Капрезе. НЕ должен удалять 'Вареные' продукты (инструкции).",
-    "include_ingredients": "",
-    "exclude_ingredients": "масло",
-    "should_contain": [
-      "Классическая паста Карбонара",
-      "Овсянка с медом"
-    ],
+    "description": "TRAP: \"but\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "but",
+    "exclude_ingredients": "",
+    "should_contain": [],
     "should_not_contain": [
-      "Рыба с картошкой фри",
-      "Свежий салат Капрезе"
+      "Imitation Blintzes",
+      "Royal Mazurek(Mazurek Krolewski)",
+      "Barley Soup(Ukrainian)"
     ]
   },
   {
     "id": 7,
-    "description": "ЛОВУШКА: Включить 'ром'. Должен найти НИЧЕГО.",
-    "include_ingredients": "ром",
+    "description": "TRAP: \"nut\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "nut",
     "exclude_ingredients": "",
     "should_contain": [],
-    "should_not_contain": []
+    "should_not_contain": [
+      "Coconut Torte",
+      "Polish Drumstick Cake",
+      "Russian Tea Cakes Or Mexican Wedding Balls"
+    ]
   },
   {
     "id": 8,
-    "description": "ЛОВУШКА: Включить 'чили'. Должен найти Карри.",
-    "include_ingredients": "чили",
+    "description": "TRAP: \"fat\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "fat",
     "exclude_ingredients": "",
-    "should_contain": [
-      "Острый тайский зеленый карри"
-    ],
+    "should_contain": [],
     "should_not_contain": []
   },
   {
     "id": 9,
-    "description": "ЛОВУШКА: Включить 'руда'. Должен найти НИЧЕГО.",
-    "include_ingredients": "руда",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": []
-  },
-  {
-    "id": 10,
-    "description": "ЛОВУШКА: Включить 'кар'. Должен найти НИЧЕГО. Наивный находит 'Морковь' и 'Карбонара'.",
-    "include_ingredients": "кар",
+    "description": "TRAP: \"rum\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "rum",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Бабушкин куриный суп с лапшой",
-      "Классическая паста Карбонара"
+      "Grandma'S Original Homemade Potato Pancakes",
+      "Grandma'S Chicken Fricassee"
+    ]
+  },
+  {
+    "id": 10,
+    "description": "TRAP: \"gin\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "gin",
+    "exclude_ingredients": "",
+    "should_contain": [],
+    "should_not_contain": [
+      "Polish Honey Cookies"
     ]
   },
   {
     "id": 11,
-    "description": "ЛОВУШКА: Включить 'чай'. Должен найти НИЧЕГО.",
-    "include_ingredients": "чай",
+    "description": "TRAP: \"pea\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "pea",
     "exclude_ingredients": "",
     "should_contain": [],
-    "should_not_contain": []
+    "should_not_contain": [
+      "Barley Soup(Ukrainian)",
+      "Polish Drumstick Cake",
+      "3 Vegetable Latkes"
+    ]
   },
   {
     "id": 12,
-    "description": "ЛОВУШКА: Исключить 'жир'. Должен найти НИЧЕГО для исключения по имени.",
-    "include_ingredients": "",
-    "exclude_ingredients": "жир",
+    "description": "TRAP: \"ale\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "ale",
+    "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": []
   },
   {
     "id": 13,
-    "description": "ЛОВУШКА: Включить 'джин'. Должен найти НИЧЕГО. Наивный находит 'Имбирь', 'Баклажан'.",
-    "include_ingredients": "джин",
+    "description": "TRAP: \"ash\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "ash",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Рататуй",
-      "Стир-фрай с тофу"
+      "Stuffed Cabbage(Moosewood Cookbook)"
     ]
   },
   {
     "id": 14,
-    "description": "ЛОВУШКА: Включить 'бар'. Должен найти НИЧЕГО.",
-    "include_ingredients": "бар",
+    "description": "TRAP: \"age\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "age",
+    "exclude_ingredients": "",
+    "should_contain": [],
+    "should_not_contain": [
+      "Mom'S Stuffed Cabbage  (Sweet And Sour)",
+      "\"Snick Snack\"",
+      "Borscht(Russian Beef, Vegetable Soup)"
+    ]
+  },
+  {
+    "id": 15,
+    "description": "TRAP: \"fun\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "fun",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": []
   },
   {
-    "id": 15,
-    "description": "ЛОВУШКА: Включить 'треска'. Должен найти Рыба с картошкой фри. НЕ должен находить 'Авокадо'.",
-    "include_ingredients": "треска",
-    "exclude_ingredients": "",
-    "should_contain": [
-      "Рыба с картошкой фри"
-    ],
-    "should_not_contain": [
-      "Соус гуакамоле"
-    ]
-  },
-  {
     "id": 16,
-    "description": "ЛОВУШКА: Включить 'яйцо'. Должен найти рецепты с 'яйцом' или 'яйцами'. Не должен находить составные ингредиенты, такие как 'яичная лапша'.",
-    "include_ingredients": "яйцо",
+    "description": "TRAP: \"men\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "men",
     "exclude_ingredients": "",
-    "should_contain": [
-      "Классическая паста Карбонара",
-      "Шоколадный фондан",
-      "Пышные панкейки"
-    ],
+    "should_contain": [],
     "should_not_contain": [
-      "Рататуй"
+      "Polish Sausage Casserole",
+      "Scuffletown Kraut Salad"
     ]
   },
   {
     "id": 17,
-    "description": "ЛОВУШКА: Исключить 'хлеб'. Должен ничего не исключать.",
-    "include_ingredients": "",
-    "exclude_ingredients": "хлеб",
-    "should_contain": [
-      "Веганский чечевичный бургер"
-    ],
-    "should_not_contain": []
+    "description": "TRAP: \"and\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "and",
+    "exclude_ingredients": "",
+    "should_contain": [],
+    "should_not_contain": [
+      "Imitation Blintzes",
+      "Cream Cheese Blintzes",
+      "Mock Cheese Blintzes"
+    ]
   },
   {
     "id": 18,
-    "description": "ЛОВУШКА: Включить 'яблоко'. Должен найти Фруктовый салат.",
-    "include_ingredients": "яблоко",
+    "description": "TRAP: \"or\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "or",
     "exclude_ingredients": "",
-    "should_contain": [
-      "Фруктовый салат"
-    ],
-    "should_not_contain": []
+    "should_contain": [],
+    "should_not_contain": [
+      "Italian Sandwiches",
+      "Potato Pancakes With Cheddar",
+      "Curry Chutney Chicken Salad"
+    ]
   },
   {
     "id": 19,
-    "description": "ЛОВУШКА: Включить 'манго'. Должен найти НИЧЕГО.",
-    "include_ingredients": "манго",
+    "description": "TRAP: \"in\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "in",
     "exclude_ingredients": "",
     "should_contain": [],
-    "should_not_contain": []
+    "should_not_contain": [
+      "Italian Sandwiches",
+      "Imitation Blintzes",
+      "Cherry Cheese Cream Tarts"
+    ]
   },
   {
     "id": 20,
-    "description": "ЛОВУШКА: Включить 'лайм'. Находит Гуакамоле.",
-    "include_ingredients": "лайм",
+    "description": "TRAP: \"it\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "include_ingredients": "it",
     "exclude_ingredients": "",
-    "should_contain": [
-      "Соус гуакамоле"
-    ],
-    "should_not_contain": []
+    "should_contain": [],
+    "should_not_contain": [
+      "Vegetable Latkes",
+      "Coconut Torte",
+      "Polish Pickles"
+    ]
   },
   {
     "id": 21,
-    "description": "ЛОВУШКА: Включить 'мен'. Должен найти НИЧЕГО.",
-    "include_ingredients": "мен",
+    "description": "Positive: include \"beef\".",
+    "include_ingredients": "beef",
     "exclude_ingredients": "",
-    "should_contain": [],
+    "should_contain": [
+      "Sauerkraut Hot Dish #1",
+      "Marshall Field Sandwich",
+      "Red Hot Lover'S Chili"
+    ],
     "should_not_contain": []
   },
   {
     "id": 22,
-    "description": "ЛОВУШКА: Включить 'карри'. Находит Зеленый карри.",
-    "include_ingredients": "карри",
+    "description": "Positive: include \"sauerkraut\".",
+    "include_ingredients": "sauerkraut",
     "exclude_ingredients": "",
     "should_contain": [
-      "Острый тайский зеленый карри"
+      "Beer And Kraut Fudge Cake",
+      "Ricky Skaggs' One Pot Meal",
+      "Reuben Pie"
     ],
     "should_not_contain": []
   },
   {
     "id": 23,
-    "description": "ЛОВУШКА: Включить 'молоко'. Находит Смузи, Панкейки. НЕ должен находить 'Кокосовое молоко'.",
-    "include_ingredients": "молоко",
+    "description": "Positive: include \"egg\".",
+    "include_ingredients": "egg",
     "exclude_ingredients": "",
     "should_contain": [
-      "Высокобелковый смузи после тренировки",
-      "Пышные панкейки"
+      "Potato Pancakes With Cheddar",
+      "Grandma'S Original Homemade Potato Pancakes",
+      "Mom'S Stuffed Cabbage  (Sweet And Sour)"
     ],
-    "should_not_contain": [
-      "Острый тайский зеленый карри"
-    ]
+    "should_not_contain": []
   },
   {
     "id": 24,
-    "description": "ЛОВУШКА: Включить 'кола'. Должен найти НИЧЕГО.",
-    "include_ingredients": "кола",
+    "description": "Positive: include \"butter\".",
+    "include_ingredients": "butter",
     "exclude_ingredients": "",
-    "should_contain": [],
+    "should_contain": [
+      "Baked Fish Chowder",
+      "Flat Armenian (Russia) Bread With Sesame Seed(Churek)",
+      "Royal Mazurek(Mazurek Krolewski)"
+    ],
     "should_not_contain": []
   },
   {
     "id": 25,
-    "description": "ЛОВУШКА: Включить 'эль'. Должен найти НИЧЕГО.",
-    "include_ingredients": "эль",
+    "description": "Positive: include \"cabbage\".",
+    "include_ingredients": "cabbage",
     "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": [
-      "Рыба с картошкой фри"
-    ]
+    "should_contain": [
+      "Mom'S Stuffed Cabbage  (Sweet And Sour)",
+      "Grandma'S Chicken Fricassee",
+      "Borscht(Russian Beef, Vegetable Soup)"
+    ],
+    "should_not_contain": []
   },
   {
     "id": 26,
-    "description": "ЛОВУШКА: Включить 'эш'. Должен найти НИЧЕГО. Наивный находит 'Сквош', 'Пюре'.",
-    "include_ingredients": "эш",
+    "description": "Positive: include \"mushroom\".",
+    "include_ingredients": "mushroom",
     "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": [
-      "Веганский чечевичный бургер",
-      "Соус гуакамоле"
-    ]
+    "should_contain": [
+      "Wesleyan Rice",
+      "Biscuit Goulash",
+      "Turkey Goulash"
+    ],
+    "should_not_contain": []
   },
   {
     "id": 27,
-    "description": "ЛОВУШКА: Включить 'ягода'. Должен найти НИЧЕГО.",
-    "include_ingredients": "ягода",
+    "description": "Positive: include \"sour cream\".",
+    "include_ingredients": "sour cream",
     "exclude_ingredients": "",
-    "should_contain": [],
+    "should_contain": [
+      "Beef Stroganoff(Serves 4)",
+      "Stroganoff, Italian Style",
+      "Jewish Rye Bread Dip"
+    ],
     "should_not_contain": []
   },
   {
     "id": 28,
-    "description": "ЛОВУШКА: Включить 'возраст'. Должен найти НИЧЕГО.",
-    "include_ingredients": "возраст",
+    "description": "Positive: include \"salt\".",
+    "include_ingredients": "salt",
     "exclude_ingredients": "",
-    "should_contain": [],
+    "should_contain": [
+      "Broiled Sirloin And Mushroom Salad",
+      "Mom Olson'S Russian Salad Dressing",
+      "Barszcz(Beet Soup)"
+    ],
     "should_not_contain": []
   },
   {
     "id": 29,
-    "description": "ЛОВУШКА: Включить 'фан'. Должен найти НИЧЕГО.",
-    "include_ingredients": "фан",
+    "description": "Positive: include \"onion\".",
+    "include_ingredients": "onion",
     "exclude_ingredients": "",
-    "should_contain": [],
+    "should_contain": [
+      "Pleasing Potato Pancakes",
+      "Beef Goulash(Microwave)",
+      "Grandma'S Chicken Fricassee"
+    ],
     "should_not_contain": []
   },
   {
     "id": 30,
-    "description": "ЛОВУШКА: Включить 'чи'. Должен найти НИЧЕГО. Наивный находит 'Курица', 'Чили', 'Чипсы'.",
-    "include_ingredients": "чи",
+    "description": "Positive: include \"potato\".",
+    "include_ingredients": "potato",
     "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": [
-      "Бабушкин куриный суп с лапшой",
-      "Рыба с картошкой фри",
-      "Острый тайский зеленый карри"
-    ]
+    "should_contain": [
+      "Dutch Potato Pancakes",
+      "Hot Cheese Chowder",
+      "Bowman'S Pot Pie"
+    ],
+    "should_not_contain": []
   },
   {
     "id": 31,
-    "description": "ЛОВУШКА: Исключить 'чи'. Должен ничего не удалять только на основе подстроки.",
-    "include_ingredients": "",
-    "exclude_ingredients": "чи",
+    "description": "Positive: include \"flour\".",
+    "include_ingredients": "flour",
+    "exclude_ingredients": "",
     "should_contain": [
-      "Бабушкин куриный суп с лапшой",
-      "Рыба с картошкой фри"
+      "Russian Tea Cakes Or Mexican Wedding Balls",
+      "Apple Potato Pancakes",
+      "Nalisniki(Lithuanian Crepes)"
     ],
     "should_not_contain": []
   },
   {
     "id": 32,
-    "description": "ЛОВУШКА: Включить 'би'. Должен найти НИЧЕГО. Наивный находит 'Говядина', 'Пиво'.",
-    "include_ingredients": "би",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": [
-      "Техасская говяжья грудинка",
-      "Рыба с картошкой фри"
-    ]
-  },
-  {
-    "id": 33,
-    "description": "ЛОВУШКА: Включить 'пан'. Должен найти НИЧЕГО. Наивный находит 'Панкейки'.",
-    "include_ingredients": "пан",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": [
-      "Пышные панкейки"
-    ]
-  },
-  {
-    "id": 34,
-    "description": "ЛОВУШКА: Включить 'пот'. Должен найти НИЧЕГО. Наивный находит 'Картофель'.",
-    "include_ingredients": "пот",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": [
-      "Рыба с картошкой фри",
-      "Вегетарианский картофельный гратен с сыром"
-    ]
-  },
-  {
-    "id": 35,
-    "description": "ЛОВУШКА: Включить 'ато'. Должен найти НИЧЕГО. Наивный находит 'Картофель', 'Помидор'.",
-    "include_ingredients": "ато",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": [
-      "Рататуй",
-      "Свежий салат Капрезе",
-      "Вегетарианский картофельный гратен с сыром"
-    ]
-  },
-  {
-    "id": 36,
-    "description": "ЛОВУШКА: Включить 'памп'. Должен найти НИЧЕГО.",
-    "include_ingredients": "памп",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": []
-  },
-  {
-    "id": 37,
-    "description": "ЛОВУШКА: Включить 'пайн'. Должен найти НИЧЕГО.",
-    "include_ingredients": "пайн",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": []
-  },
-  {
-    "id": 38,
-    "description": "ЛОВУШКА: Включить 'масло'. Находит рецепты с 'маслом'. Не должен находить составные ингредиенты, такие как 'арахисовое масло'.",
-    "include_ingredients": "масло",
+    "description": "Positive: include \"milk\".",
+    "include_ingredients": "milk",
     "exclude_ingredients": "",
     "should_contain": [
-      "Шоколадный фондан"
+      "Bowman'S Pot Pie",
+      "Grandma'S Chicken Fricassee",
+      "Dutch Potato Pancakes"
     ],
     "should_not_contain": []
   },
   {
-    "id": 39,
-    "description": "ЛОВУШКА: Исключить 'кот'. Должен ничего не исключать.",
-    "include_ingredients": "",
-    "exclude_ingredients": "кот",
-    "should_contain": [],
+    "id": 33,
+    "description": "Positive: include \"garlic\".",
+    "include_ingredients": "garlic",
+    "exclude_ingredients": "",
+    "should_contain": [
+      "Turkey Goulash",
+      "Beef And Sausage Hors D'Oeuvre",
+      "Tortilla Roll Ups"
+    ],
     "should_not_contain": []
+  },
+  {
+    "id": 34,
+    "description": "Positive: include \"chicken\".",
+    "include_ingredients": "chicken",
+    "exclude_ingredients": "",
+    "should_contain": [
+      "Creole Chicken And Mushroom Salad",
+      "Chicken And Spinach Enchiladas(Mexican Meal)",
+      "Grandma'S Chicken Fricassee"
+    ],
+    "should_not_contain": []
+  },
+  {
+    "id": 35,
+    "description": "Positive: include \"sugar\".",
+    "include_ingredients": "sugar",
+    "exclude_ingredients": "",
+    "should_contain": [
+      "Mom'S Stuffed Cabbage  (Sweet And Sour)",
+      "Polish Honey Cookies",
+      "Polish Cream Cheese Cake"
+    ],
+    "should_not_contain": []
+  },
+  {
+    "id": 36,
+    "description": "Exclude: \"beef\" should not appear in results.",
+    "include_ingredients": "",
+    "exclude_ingredients": "beef",
+    "should_contain": [
+      "Beef Stroganoff(Serves 4)",
+      "Cheesy Chicken Fajitas"
+    ],
+    "should_not_contain": [
+      "Phil'S Easy Burritos",
+      "Borscht(Russian Beef, Vegetable Soup)",
+      "Easy Red Beet Soup"
+    ]
+  },
+  {
+    "id": 37,
+    "description": "Exclude: \"sauerkraut\" should not appear in results.",
+    "include_ingredients": "",
+    "exclude_ingredients": "sauerkraut",
+    "should_contain": [
+      "Cheesy Chicken Fajitas",
+      "Vegetable Latkes"
+    ],
+    "should_not_contain": [
+      "Mini-Reubens(Hors D'Oeuvre)",
+      "Sauerkraut Balls",
+      "Ricky Skaggs' One Pot Meal"
+    ]
+  },
+  {
+    "id": 38,
+    "description": "Exclude: \"egg\" should not appear in results.",
+    "include_ingredients": "",
+    "exclude_ingredients": "egg",
+    "should_contain": [
+      "Polish Pickles",
+      "Marinated Mushroom Salad"
+    ],
+    "should_not_contain": [
+      "Royal Mazurek(Mazurek Krolewski)",
+      "Polish Kolachky",
+      "Dutch Potato Pancakes"
+    ]
+  },
+  {
+    "id": 39,
+    "description": "Exclude: \"mushroom\" should not appear in results.",
+    "include_ingredients": "",
+    "exclude_ingredients": "mushroom",
+    "should_contain": [
+      "Beer And Kraut Fudge Cake",
+      "Delicious Potato Pancakes"
+    ],
+    "should_not_contain": [
+      "Turkey Goulash",
+      "Wesleyan Rice",
+      "Biscuit Goulash"
+    ]
   },
   {
     "id": 40,
-    "description": "ЛОВУШКА: Включить 'собака'. Должен найти НИЧЕГО.",
-    "include_ingredients": "собака",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": []
+    "description": "Combined: include \"cabbage\", exclude \"beef\".",
+    "include_ingredients": "cabbage",
+    "exclude_ingredients": "beef",
+    "should_contain": [
+      "Mom'S Stuffed Cabbage  (Sweet And Sour)",
+      "Stuffed Cabbage(Moosewood Cookbook)",
+      "Whole Stuffed Cabbage"
+    ],
+    "should_not_contain": [
+      "Busy Day Goulash Skillet",
+      "Hanky-Panks"
+    ]
   },
   {
     "id": 41,
-    "description": "ЛОВУШКА: Включить 'бургер'. Должен найти НИЧЕГО (поиск по ингредиентам, а не по названию).",
-    "include_ingredients": "бургер",
-    "exclude_ingredients": "",
-    "should_contain": [],
+    "description": "Combined: include \"sour cream\", exclude \"mushroom\".",
+    "include_ingredients": "sour cream",
+    "exclude_ingredients": "mushroom",
+    "should_contain": [
+      "Barley Soup(Ukrainian)",
+      "Polish Cream Cheese Cake",
+      "Beef Goulash(Microwave)"
+    ],
     "should_not_contain": [
-      "Веганский чечевичный бургер"
+      "Biscuit Goulash",
+      "Wesleyan Rice"
     ]
   },
   {
     "id": 42,
-    "description": "ЛОВУШКА: Включить 'шейк'. Должен найти НИЧЕГО.",
-    "include_ingredients": "шейк",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": []
+    "description": "Combined: include \"onion\", exclude \"sauerkraut\".",
+    "include_ingredients": "onion",
+    "exclude_ingredients": "sauerkraut",
+    "should_contain": [
+      "Pleasing Potato Pancakes",
+      "Potato Pancakes With Cheddar",
+      "Vegetable Latkes"
+    ],
+    "should_not_contain": [
+      "Beer And Kraut Fudge Cake",
+      "Mini-Reubens(Hors D'Oeuvre)"
+    ]
   },
   {
     "id": 43,
-    "description": "ЛОВУШКА: Включить 'сливки'. Находит рецепты со 'сливками'. Не должен находить составные ингредиенты, такие как 'жирные сливки' или 'сливочный сыр'.",
-    "include_ingredients": "сливки",
+    "description": "TRAP: \"pan\" substring should not match whole ingredients.",
+    "include_ingredients": "pan",
     "exclude_ingredients": "",
-    "should_contain": [
-      "Вегетарианский картофельный гратен с сыром",
-      "Суп-пюре из мускатной тыквы"
-    ],
+    "should_contain": [],
     "should_not_contain": [
-      "Высокобелковый смузи после тренировки"
+      "Nuria'S Russian Salad"
     ]
   },
   {
     "id": 44,
-    "description": "ЛОВУШКА: Включить 'фрай'. Должен найти НИЧЕГО.",
-    "include_ingredients": "фрай",
+    "description": "TRAP: \"eat\" substring should not match whole ingredients.",
+    "include_ingredients": "eat",
+    "exclude_ingredients": "",
+    "should_contain": [],
+    "should_not_contain": [
+      "Mom'S Stuffed Cabbage  (Sweet And Sour)",
+      "Grandma'S Chicken Fricassee"
+    ]
+  },
+  {
+    "id": 45,
+    "description": "TRAP: \"ice\" substring should not match whole ingredients.",
+    "include_ingredients": "ice",
+    "exclude_ingredients": "",
+    "should_contain": [],
+    "should_not_contain": [
+      "Imitation Blintzes",
+      "Cherry Cheese Cream Tarts"
+    ]
+  },
+  {
+    "id": 46,
+    "description": "TRAP: \"raw\" substring should not match whole ingredients.",
+    "include_ingredients": "raw",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": []
   },
   {
-    "id": 45,
-    "description": "ЛОВУШКА: Включить 'стар'. Должен найти НИЧЕГО. Наивный находит 'Горчица'.",
-    "include_ingredients": "стар",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": [
-      "Говядина Веллингтон"
-    ]
-  },
-  {
-    "id": 46,
-    "description": "ЛОВУШКА: Включить 'оф'. Должен найти НИЧЕГО. Наивный находит 'Тофу'.",
-    "include_ingredients": "оф",
-    "exclude_ingredients": "",
-    "should_contain": [],
-    "should_not_contain": [
-      "Стир-фрай с тофу"
-    ]
-  },
-  {
     "id": 47,
-    "description": "ЛОВУШКА: Включить 'и'. Должен найти НИЧЕГО.",
-    "include_ingredients": "и",
+    "description": "TRAP: \"dry\" substring should not match whole ingredients.",
+    "include_ingredients": "dry",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": []
   },
   {
     "id": 48,
-    "description": "ЛОВУШКА: Включить 'ор'. Должен найти НИЧЕГО. Наивный находит 'Апельсин', 'Кукуруза'.",
-    "include_ingredients": "ор",
+    "description": "TRAP: \"hot\" substring should not match whole ingredients.",
+    "include_ingredients": "hot",
     "exclude_ingredients": "",
     "should_contain": [],
-    "should_not_contain": [
-      "Фруктовый салат"
-    ]
+    "should_not_contain": []
   },
   {
     "id": 49,
-    "description": "ЛОВУШКА: Включить 'ин'. Должен найти НИЧЕГО. Наивный находит 'Кумин', 'Цуккини', 'Вино'.",
-    "include_ingredients": "ин",
+    "description": "TRAP: \"any\" substring should not match whole ingredients.",
+    "include_ingredients": "any",
     "exclude_ingredients": "",
     "should_contain": [],
-    "should_not_contain": [
-      "Веганский чечевичный бургер",
-      "Рататуй",
-      "Грибное ризотто"
-    ]
+    "should_not_contain": []
   },
   {
     "id": 50,
-    "description": "ЛОВУШКА: Включить 'ит'. Должен найти НИЧЕГО. Наивный находит 'Фрукт'.",
-    "include_ingredients": "ит",
+    "description": "TRAP: \"top\" substring should not match whole ingredients.",
+    "include_ingredients": "top",
     "exclude_ingredients": "",
     "should_contain": [],
-    "should_not_contain": [
-      "Фруктовый салат"
-    ]
+    "should_not_contain": []
   }
 ]

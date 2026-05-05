@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     SIMILAR_RECIPES_MAX: int = 6
     SIMILAR_RECIPES_THRESHOLD: float = 0.75
 
+    # Adaptive result limits (calibrated on 500-recipe CIS dataset)
+    # Similar recipes: p95=0.23, avg bucket ~7 at margin=0.05
+    SIMILAR_RECIPES_ABSOLUTE_MAX_DIST: float = 0.23
+    SIMILAR_RECIPES_RELATIVE_MARGIN: float = 0.05
+    SIMILAR_RECIPES_HARD_LIMIT: int = 10
+    # Vector search: p95=0.40
+    SEARCH_ABSOLUTE_MAX_DIST: float = 0.40
+    SEARCH_RELATIVE_MARGIN: float = 0.10
+    SEARCH_HARD_LIMIT: int = 10
+
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
@@ -76,9 +86,7 @@ class Settings(BaseSettings):
                 missing_fields.append(field)
 
         if missing_fields:
-            raise ValueError(
-                f"Missing required environment variables: {','.join(missing_fields)}"
-            )
+            raise ValueError(f"Missing required environment variables: {','.join(missing_fields)}")
 
         return self
 

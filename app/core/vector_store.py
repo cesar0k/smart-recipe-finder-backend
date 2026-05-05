@@ -30,9 +30,7 @@ class VectorStore:
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(
-        self, collection_name: str | None = None, force_new: bool = False
-    ) -> None:
+    def __init__(self, collection_name: str | None = None, force_new: bool = False) -> None:
         if getattr(self, "_initialized", False) and not force_new:
             return
 
@@ -45,9 +43,7 @@ class VectorStore:
             self.collection_name = "recipes"
 
         try:
-            self.client = chromadb.HttpClient(
-                host=settings.CHROMA_HOST, port=settings.CHROMA_PORT
-            )
+            self.client = chromadb.HttpClient(host=settings.CHROMA_HOST, port=settings.CHROMA_PORT)
         except Exception as ex:
             logger.error(f"Failed to connect to ChromaDB: {ex}")
 
@@ -60,9 +56,7 @@ class VectorStore:
     @property
     def collection(self) -> Collection:
         if self._collection is None:
-            self._collection = self.client.get_or_create_collection(
-                name=self.collection_name
-            )
+            self._collection = self.client.get_or_create_collection(name=self.collection_name)
         return self._collection
 
     def preload_model(self) -> None:
@@ -128,7 +122,8 @@ class VectorStore:
 
         await asyncio.to_thread(_sync_upsert)
 
-    async def search(self, query: str, n_results: int = 5) -> list[int]:
+    async def search(self, query: str, n_results: int = 5) -> list[tuple[int, float]]:
+        """Return (recipe_id, distance) pairs ordered by ascending distance."""
         VectorStore.search_calls_count += 1
 
         query_vec_result = await self.embed_query(query)
@@ -136,16 +131,21 @@ class VectorStore:
 
         def _sync_search() -> VectorQueryResult:
             query_result = self.collection.query(
-                query_embeddings=[query_embedding_list], n_results=n_results
+                query_embeddings=[query_embedding_list],
+                n_results=n_results,
+                include=["distances"],
             )
             return cast(VectorQueryResult, query_result)
 
         results: Any = await asyncio.to_thread(_sync_search)
 
-        if not results.get("ids") or not results["ids"][0]:
+        ids = (results.get("ids") or [[]])[0] or []
+        dists = (results.get("distances") or [[]])[0] or []
+
+        if not ids:
             return []
 
-        return [int(id_str) for id_str in results["ids"][0]]
+        return [(int(id_str), float(dist)) for id_str, dist in zip(ids, dists, strict=True)]
 
     async def search_similar_by_id(
         self, recipe_id: int, n_results: int = 10
@@ -153,9 +153,7 @@ class VectorStore:
         VectorStore.search_calls_count += 1
 
         def _fetch_embedding() -> Any:
-            got = self.collection.get(
-                ids=[str(recipe_id)], include=["embeddings"]
-            )
+            got = self.collection.get(ids=[str(recipe_id)], include=["embeddings"])
             embs = got.get("embeddings")
             if embs is None or len(embs) == 0:
                 return None
@@ -196,9 +194,7 @@ class VectorStore:
             self.client.delete_collection(self.collection_name)
         except Exception as ex:
             logger.error(f"Failed to delete collection: {ex}")
-        self._collection = self.client.get_or_create_collection(
-            name=self.collection_name
-        )
+        self._collection = self.client.get_or_create_collection(name=self.collection_name)
 
 
 vector_store = VectorStore()
