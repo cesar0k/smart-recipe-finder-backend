@@ -25,7 +25,7 @@ from app.core.exceptions import (
 from app.core.s3_client import s3_client
 from app.core.text_utils import get_word_forms
 from app.core.vector_store import vector_store
-from app.models import Recipe
+from app.models import Recipe, RecipeTags
 from app.models.recipe_draft import RecipeDraft
 from app.models.user import User
 from app.schemas import RecipeCreate, RecipeUpdate
@@ -48,6 +48,17 @@ def _with_owner(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
     return query.options(selectinload(Recipe.owner))
 
 
+def _with_relations(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
+    """Add selectinload for owner + tags relationships."""
+    return query.options(selectinload(Recipe.owner), selectinload(Recipe.tags))
+
+
+async def _reload_recipe(db: AsyncSession, recipe_id: int) -> Recipe | None:
+    """Reload a recipe with all relationships (owner + tags) eagerly loaded."""
+    result = await db.execute(_with_relations(select(Recipe).where(Recipe.id == recipe_id)))
+    return result.scalar_one_or_none()
+
+
 def _ensure_can_modify(recipe: Recipe, user: User) -> None:
     """Raise NotAuthorizedError unless user is owner / moderator / admin."""
     if user.role in ("moderator", "admin"):
@@ -63,6 +74,148 @@ async def _bump_recipe_caches(cache: Cache | None, *, recipe_id: int | None = No
     await search_cache.bump_search_version(cache)
     await similar_cache.bump_similar_version(cache)
     await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
+
+
+def _apply_tag_filter(
+    recipes: list[Recipe],
+    tag_filter: dict[str, Any],
+) -> list[Recipe]:
+    """Post-filter vector search results by LLM-detected tag constraints.
+
+    Recipes without tags (tags is None) are always included — tags may not have
+    been generated yet and we must not incorrectly exclude them.
+    """
+    if not tag_filter:
+        return recipes
+
+    result = []
+    for recipe in recipes:
+        # With lazy="noload", recipe.tags is None if not loaded via selectinload.
+        # Tags not generated yet → include recipe (don't exclude on missing data).
+        tags = recipe.tags
+
+        if tags is None:
+            # Tags not generated yet — include to avoid false exclusion
+            result.append(recipe)
+            continue
+
+        excluded = False
+        for field, expected in tag_filter.items():
+            actual = getattr(tags, field, None)
+            if actual is None:
+                # Missing tag value — don't exclude
+                continue
+            if isinstance(expected, bool):
+                # e.g. {"vegetarian": True} → exclude if tags.vegetarian is False
+                if expected is True and actual is False:
+                    excluded = True
+                    break
+                if expected is False and actual is True:
+                    excluded = True
+                    break
+            elif isinstance(expected, list):
+                # e.g. {"spice_level": ["hot","very_hot"]} → keep only if matches
+                if actual not in expected:
+                    excluded = True
+                    break
+            elif isinstance(expected, str):
+                # e.g. {"meal_type": "soup"}
+                if actual != expected:
+                    excluded = True
+                    break
+
+        if not excluded:
+            result.append(recipe)
+
+    return result
+
+
+def _is_positive_only_intent(tag_filter: dict[str, Any]) -> bool:
+    """Return True if tag_filter contains ONLY positive constraints suitable for SQL-first.
+
+    Fields allowed for SQL-first:
+      vegetarian, vegan, gluten_free, dairy_free, meal_type, main_protein
+
+    Fields that stay in vector-first path:
+      spice_level, occasion, cost_tier, technique_difficulty, allergens
+    """
+    SQL_FIRST_FIELDS = {"vegetarian", "vegan", "gluten_free", "dairy_free", "meal_type", "main_protein"}  # noqa: E501
+    negation_indicators = {"main_protein": "none"}
+
+    for field, expected in tag_filter.items():
+        # Only route to SQL-first if ALL fields are in the allowed set
+        if field not in SQL_FIRST_FIELDS:
+            return False
+        # Bool False = exclusion → not positive-only
+        if isinstance(expected, bool) and expected is False:
+            return False
+        # Known negation patterns
+        if field in negation_indicators and expected == negation_indicators[field]:
+            return False
+    return True
+
+
+async def _sql_tag_search(
+    db: AsyncSession,
+    tag_filter: dict[str, Any],
+    query_str: str,
+    include_str: str | None,
+    exclude_str: str | None,
+    min_time: int | None,
+    max_time: int | None,
+    difficulty: str | None,
+    cuisine: str | None,
+    hard_limit: int,
+) -> list[Recipe]:
+    """SQL-first search: fetch all recipes matching tags, re-rank by vector similarity."""
+    # Build SQL filter for RecipeTags
+    join_conditions = []
+    for field, expected in tag_filter.items():
+        col = getattr(RecipeTags, field, None)
+        if col is None:
+            continue
+        if isinstance(expected, bool):
+            join_conditions.append(col == expected)
+        elif isinstance(expected, list):
+            join_conditions.append(col.in_(expected))
+        elif isinstance(expected, str):
+            join_conditions.append(col == expected)
+
+    base_query = _with_owner(
+        select(Recipe)
+        .join(RecipeTags, Recipe.id == RecipeTags.recipe_id)
+        .where(Recipe.status == "approved", *join_conditions)
+        .options(selectinload(Recipe.tags))
+    )
+    base_query = _apply_filters(
+        base_query,
+        include_str,
+        exclude_str,
+        min_time=min_time,
+        max_time=max_time,
+        difficulty=difficulty,
+        cuisine=cuisine,
+    )
+
+    result = await db.execute(base_query)
+    candidates = result.scalars().unique().all()
+
+    if not candidates:
+        return []
+
+    # Re-rank by vector similarity to the query
+    candidate_ids = {r.id for r in candidates}
+    vector_pairs = await vector_store.search(query=query_str, n_results=len(candidates) + 10)
+    # Keep only candidates that matched the SQL filter, preserving vector order
+    ranked = [(rid, dist) for rid, dist in vector_pairs if rid in candidate_ids]
+    # Add any SQL matches not in vector results at the end (new recipes not yet embedded)
+    ranked_ids = {rid for rid, _ in ranked}
+    unranked = [(r.id, 1.0) for r in candidates if r.id not in ranked_ids]
+    ranked.extend(unranked)
+
+    recipes_map = {r.id: r for r in candidates}
+    top = ranked[:hard_limit]
+    return [recipes_map[rid] for rid, _ in top if rid in recipes_map]
 
 
 def _apply_adaptive_limit(
@@ -106,9 +259,38 @@ def _create_semantic_document(recipe: Recipe) -> tuple[str, dict[str, Any]]:
 
     description_str = f"Description: {recipe.description}. " if recipe.description else ""
 
+    # Include LLM-generated tags in the document when available.
+    # This significantly improves semantic search quality — e.g. a recipe tagged
+    # "vegetarian, soup" will score higher for "vegetarian soup" queries.
+    tags_str = ""
+    tags = recipe.tags  # None if not yet generated (lazy="noload" → no exception)
+    if tags is not None:
+        tag_parts: list[str] = []
+        if tags.vegetarian:
+            tag_parts.append("vegetarian")
+        if tags.vegan:
+            tag_parts.append("vegan")
+        if tags.gluten_free:
+            tag_parts.append("gluten-free")
+        if tags.dairy_free:
+            tag_parts.append("dairy-free")
+        if tags.meal_type:
+            tag_parts.append(tags.meal_type)
+        if tags.main_protein and tags.main_protein != "none":
+            tag_parts.append(tags.main_protein)
+        if tags.spice_level and tags.spice_level != "none":
+            tag_parts.append(f"{tags.spice_level} spice")
+        if tags.cooking_method:
+            tag_parts.append(tags.cooking_method)
+        if tags.cultural_sub_region:
+            tag_parts.append(tags.cultural_sub_region)
+        if tag_parts:
+            tags_str = f"Tags: {', '.join(tag_parts)}. "
+
     doc_to_embed = (
         f"Title: {recipe.title}. "
         f"{description_str}"
+        f"{tags_str}"
         f"Ingredients: {ingredients_str}. "
         f"Instructions: {recipe.instructions}. "
         f"Cooking time: {t} minutes ({time_description}). "
@@ -272,7 +454,9 @@ async def create_recipe(
             await db.commit()
 
     await _bump_recipe_caches(cache)
-    return db_recipe
+    # Reload with all relationships so callers can safely serialise the response
+    reloaded = await _reload_recipe(db, db_recipe.id)
+    return reloaded if reloaded is not None else db_recipe
 
 
 async def get_all_recipes(
@@ -397,7 +581,9 @@ async def get_recipe_for_caller(
 
 
 async def get_recipe_by_id(db: AsyncSession, *, recipe_id: int) -> Recipe | None:
-    query = _with_owner(select(Recipe).where(Recipe.id == recipe_id))
+    query = _with_owner(
+        select(Recipe).where(Recipe.id == recipe_id).options(selectinload(Recipe.tags))
+    )
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
@@ -786,10 +972,12 @@ async def search_recipes_by_vector(
     # Only return approved recipes in search results
     candidate_ids = [rid for rid, _ in search_pairs]
     query = _with_owner(
-        select(Recipe).where(
+        select(Recipe)
+        .where(
             Recipe.id.in_(candidate_ids),
             Recipe.status == "approved",
         )
+        .options(selectinload(Recipe.tags))  # load tags for post-filter
     )
 
     query = _apply_filters(
@@ -802,11 +990,45 @@ async def search_recipes_by_vector(
         cuisine=cuisine,
     )
 
+    # LLM: parse query intent for tag-based routing
+    from app.services import tag_service
+
+    tag_filter = await tag_service.parse_query_intent(query_str)
+
+    # Hybrid routing:
+    # - Positive-only intent (vegan=True, meal_type=dessert): SQL-first, re-rank by vector
+    # - Negation/exclusion intent (без мяса → vegetarian=True + main_protein=none): vector-first
+    # - No intent: pure vector search
+    if tag_filter and _is_positive_only_intent(tag_filter):
+        return await _sql_tag_search(
+            db,
+            tag_filter,
+            query_str,
+            include_str,
+            exclude_str,
+            min_time,
+            max_time,
+            difficulty,
+            cuisine,
+            hard_limit=settings.SEARCH_HARD_LIMIT,
+        )
+
     result = await db.execute(query)
     recipes_map = {r.id: r for r in result.scalars().unique().all()}
 
-    # Keep distance ordering and apply adaptive limit
+    # Keep distance ordering over all SQL-filtered candidates
     ordered_pairs = [(rid, dist) for rid, dist in search_pairs if rid in recipes_map]
+
+    # Negation post-filter: applied BEFORE adaptive limit so pool isn't truncated first
+    if tag_filter:
+        filtered_recipes = _apply_tag_filter(
+            [recipes_map[rid] for rid, _ in ordered_pairs if rid in recipes_map],
+            tag_filter,
+        )
+        filtered_ids = {r.id for r in filtered_recipes}
+        ordered_pairs = [(rid, dist) for rid, dist in ordered_pairs if rid in filtered_ids]
+
+    # Adaptive limit on the (possibly tag-filtered) candidate set
     adaptive = _apply_adaptive_limit(
         ordered_pairs,
         abs_max=settings.SEARCH_ABSOLUTE_MAX_DIST,

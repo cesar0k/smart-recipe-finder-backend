@@ -495,6 +495,22 @@ async def main() -> None:
 
     success = True
 
+    # Patch production settings with testing values for the duration of evaluate:
+    # 1. Disable adaptive cutoff (embeddings without tags have higher distances)
+    # 2. Disable LLM intent parsing (tests pure vector quality, not hybrid routing)
+    from app.core import config as _app_config
+    from app.services import tag_service as _tag_service
+    _orig_search_abs = _app_config.settings.SEARCH_ABSOLUTE_MAX_DIST
+    _orig_search_margin = _app_config.settings.SEARCH_RELATIVE_MARGIN
+    _orig_parse_intent = _tag_service.parse_query_intent
+    _app_config.settings.SEARCH_ABSOLUTE_MAX_DIST = testing_settings.SEARCH_ABSOLUTE_MAX_DIST
+    _app_config.settings.SEARCH_RELATIVE_MARGIN = testing_settings.SEARCH_RELATIVE_MARGIN
+
+    async def _noop_intent(query: str):  # type: ignore[misc]
+        return None  # disables both SQL-first and negation post-filter
+
+    _tag_service.parse_query_intent = _noop_intent  # type: ignore[assignment]
+
     try:
         async with SessionLocal() as db:
             await seed_eval_data(db, recipes_path)
@@ -542,6 +558,10 @@ async def main() -> None:
         print("Cleaning up...")
         await engine.dispose()
         recipe_service.vector_store = original_vector_store
+        # Restore production settings and functions
+        _app_config.settings.SEARCH_ABSOLUTE_MAX_DIST = _orig_search_abs
+        _app_config.settings.SEARCH_RELATIVE_MARGIN = _orig_search_margin
+        _tag_service.parse_query_intent = _orig_parse_intent  # type: ignore[assignment]
 
         try:
             eval_vector_store.client.delete_collection(TEST_COLLECTION_NAME)

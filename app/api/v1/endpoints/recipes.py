@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models, schemas
@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.health import is_embedding_model_ready
 from app.db.session import get_db
 from app.models.user import User
-from app.services import recipe_service
+from app.services import recipe_service, tag_service
 
 router = APIRouter()
 
@@ -21,11 +21,14 @@ async def create_new_recipe(
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User, Depends(get_current_user)],
+    background_tasks: BackgroundTasks,
     recipe_in: schemas.RecipeCreate,
 ) -> schemas.Recipe:
     db_recipe = await recipe_service.create_recipe(
         db=db, cache=cache, recipe_in=recipe_in, current_user=current_user
     )
+    if db_recipe.status == "approved":
+        background_tasks.add_task(tag_service.classify_recipe_tags, db_recipe.id)
     return schemas.Recipe.model_validate(db_recipe)
 
 
@@ -201,6 +204,7 @@ async def update_existing_recipe(
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[Cache, Depends(get_cache)],
     current_user: Annotated[User, Depends(get_current_user)],
+    background_tasks: BackgroundTasks,
     recipe_id: int,
     recipe_in: schemas.RecipeUpdate,
 ) -> schemas.Recipe | schemas.RecipeDraftResponse:
@@ -213,6 +217,8 @@ async def update_existing_recipe(
     )
     if isinstance(result, models.RecipeDraft):
         return schemas.RecipeDraftResponse.model_validate(result)
+    # Re-classify tags whenever the recipe content is updated
+    background_tasks.add_task(tag_service.classify_recipe_tags, recipe_id)
     return schemas.Recipe.model_validate(result)
 
 
