@@ -7,6 +7,7 @@ from typing import Any, Self, cast
 import chromadb
 import numpy as np
 from chromadb.api.models.Collection import Collection
+from chromadb.errors import NotFoundError as ChromaNotFoundError
 from chromadb.types import VectorQueryResult
 from sentence_transformers import SentenceTransformer
 
@@ -57,6 +58,16 @@ class VectorStore:
     def collection(self) -> Collection:
         if self._collection is None:
             self._collection = self.client.get_or_create_collection(name=self.collection_name)
+        return self._collection
+
+    def _refresh_collection(self) -> Collection:
+        """Re-fetch collection from ChromaDB server, updating the cached UUID.
+
+        Called automatically when a NotFoundError is raised — this happens when
+        seed_db.py runs clear() in a separate process, creating a new collection
+        with a new UUID while this process still holds the old cached object.
+        """
+        self._collection = self.client.get_or_create_collection(name=self.collection_name)
         return self._collection
 
     def preload_model(self) -> None:
@@ -130,11 +141,20 @@ class VectorStore:
         query_embedding_list = query_vec_result.tolist()
 
         def _sync_search() -> VectorQueryResult:
-            query_result = self.collection.query(
-                query_embeddings=[query_embedding_list],
-                n_results=n_results,
-                include=["distances"],
-            )
+            try:
+                query_result = self.collection.query(
+                    query_embeddings=[query_embedding_list],
+                    n_results=n_results,
+                    include=["distances"],
+                )
+            except ChromaNotFoundError:
+                # Collection UUID changed (seed_db.py ran clear() in another process)
+                logger.warning("ChromaDB collection not found — refreshing and retrying")
+                query_result = self._refresh_collection().query(
+                    query_embeddings=[query_embedding_list],
+                    n_results=n_results,
+                    include=["distances"],
+                )
             return cast(VectorQueryResult, query_result)
 
         results: Any = await asyncio.to_thread(_sync_search)
@@ -153,7 +173,12 @@ class VectorStore:
         VectorStore.search_calls_count += 1
 
         def _fetch_embedding() -> Any:
-            got = self.collection.get(ids=[str(recipe_id)], include=["embeddings"])
+            try:
+                col = self.collection
+                got = col.get(ids=[str(recipe_id)], include=["embeddings"])
+            except ChromaNotFoundError:
+                logger.warning("ChromaDB collection not found — refreshing")
+                got = self._refresh_collection().get(ids=[str(recipe_id)], include=["embeddings"])
             embs = got.get("embeddings")
             if embs is None or len(embs) == 0:
                 return None
@@ -167,11 +192,19 @@ class VectorStore:
             return []
 
         def _sync_query() -> VectorQueryResult:
-            query_result = self.collection.query(
-                query_embeddings=[emb],
-                n_results=n_results + 1,
-                include=["distances"],
-            )
+            try:
+                query_result = self.collection.query(
+                    query_embeddings=[emb],
+                    n_results=n_results + 1,
+                    include=["distances"],
+                )
+            except ChromaNotFoundError:
+                logger.warning("ChromaDB collection not found — refreshing and retrying")
+                query_result = self._refresh_collection().query(
+                    query_embeddings=[emb],
+                    n_results=n_results + 1,
+                    include=["distances"],
+                )
             return cast(VectorQueryResult, query_result)
 
         results: Any = await asyncio.to_thread(_sync_query)

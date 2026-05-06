@@ -3,6 +3,7 @@ from .moderation_log import ModerationLog
 from .notification import Notification
 from .recipe import Recipe
 from .recipe_draft import RecipeDraft
+from .recipe_tags import RecipeTags
 from .refresh_token import RefreshToken
 from .user import User
 
@@ -12,6 +13,7 @@ __all__ = [
     "Notification",
     "Recipe",
     "RecipeDraft",
+    "RecipeTags",
     "RefreshToken",
     "User",
 ]
