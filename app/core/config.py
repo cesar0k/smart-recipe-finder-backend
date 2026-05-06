@@ -46,19 +46,20 @@ class Settings(BaseSettings):
     MAX_IMAGE_HEIGHT: int = 8192
 
     EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large-instruct"
+    LLM_MODEL: str = "google/gemini-3-flash-preview"  # openrouter/router model; override via .env
 
     SIMILAR_RECIPES_MAX: int = 6
     SIMILAR_RECIPES_THRESHOLD: float = 0.75
 
-    # Adaptive result limits (calibrated on 500-recipe CIS dataset)
-    # Similar recipes: p95=0.23, avg bucket ~7 at margin=0.05
-    SIMILAR_RECIPES_ABSOLUTE_MAX_DIST: float = 0.23
-    SIMILAR_RECIPES_RELATIVE_MARGIN: float = 0.05
+    # Adaptive result limits (calibrated on 171-recipe CIS dataset after dedup)
+    # Similar recipes: p95=0.30, avg bucket ~7.5 at margin=0.08
+    SIMILAR_RECIPES_ABSOLUTE_MAX_DIST: float = 0.30
+    SIMILAR_RECIPES_RELATIVE_MARGIN: float = 0.08
     SIMILAR_RECIPES_HARD_LIMIT: int = 10
-    # Vector search: p95=0.40
-    SEARCH_ABSOLUTE_MAX_DIST: float = 0.40
-    SEARCH_RELATIVE_MARGIN: float = 0.10
-    SEARCH_HARD_LIMIT: int = 10
+    # Vector search: p95=0.38
+    SEARCH_ABSOLUTE_MAX_DIST: float = 0.38
+    SEARCH_RELATIVE_MARGIN: float = 0.13
+    SEARCH_HARD_LIMIT: int = 20
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""

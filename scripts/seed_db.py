@@ -19,6 +19,7 @@ from app.models.recipe import Recipe
 from app.models.user import User
 from app.schemas import RecipeCreate
 from app.services import recipe_service
+from app.services.tag_service import classify_recipe_tags
 
 DATASETS_PATH = Path(__file__).resolve().parents[1] / "datasets"
 RECIPE_PHOTOS_PATH = DATASETS_PATH / "recipe_photos"
@@ -43,8 +44,7 @@ async def upload_local_photos(recipe_id: int, json_id: int) -> list[str]:
         return []
 
     photo_files = sorted(
-        f for f in photo_dir.iterdir()
-        if f.is_file() and f.suffix.lower() in PHOTO_EXTENSIONS
+        f for f in photo_dir.iterdir() if f.is_file() and f.suffix.lower() in PHOTO_EXTENSIONS
     )
 
     if not photo_files:
@@ -83,6 +83,16 @@ async def seed(lang: str) -> None:
     print("Cleaning Vector Store...")
     vector_store.clear()
 
+    print("Flushing Redis cache...")
+    import redis.asyncio as aioredis
+
+    from app.core.config import settings
+
+    _redis = aioredis.from_url(settings.REDIS_URL)
+    await _redis.flushdb()
+    await _redis.aclose()
+    print(" - Redis cache cleared.")
+
     has_photos_dir = RECIPE_PHOTOS_PATH.exists() and any(RECIPE_PHOTOS_PATH.iterdir())
     if has_photos_dir:
         print(f" - Found local photos at {RECIPE_PHOTOS_PATH}")
@@ -92,9 +102,7 @@ async def seed(lang: str) -> None:
 
     async with AsyncSessionLocal() as db:
         # Find an admin user to assign as recipe owner
-        result = await db.execute(
-            select(User).where(User.role == "admin").limit(1)
-        )
+        result = await db.execute(select(User).where(User.role == "admin").limit(1))
         admin_user = result.scalar_one_or_none()
 
         if admin_user is None:
@@ -127,15 +135,28 @@ async def seed(lang: str) -> None:
                     db_recipe.image_urls = uploaded_urls
                     db.add(db_recipe)
                     await db.commit()
-                    print(f"   Uploaded {len(uploaded_urls)} photo(s) for \"{db_recipe.title}\"")
+                    print(f'   Uploaded {len(uploaded_urls)} photo(s) for "{db_recipe.title}"')
 
         print(f"Successfully inserted {len(recipes_data)} recipes.")
 
+    # Classify tags for all seeded recipes (classify_recipe_tags opens its own session)
+    print("Classifying tags via LLM (concurrency=5)...")
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Recipe.id).where(Recipe.status == "approved"))
+        recipe_ids = [row[0] for row in result.all()]
+
+    semaphore = asyncio.Semaphore(5)
+
+    async def _classify(rid: int) -> None:
+        async with semaphore:
+            await classify_recipe_tags(rid)
+
+    await asyncio.gather(*[_classify(rid) for rid in recipe_ids])
+    print(f"Tag classification done for {len(recipe_ids)} recipes.")
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Seed the database with sample recipes."
-    )
+    parser = argparse.ArgumentParser(description="Seed the database with sample recipes.")
     parser.add_argument(
         "--lang",
         type=str,
