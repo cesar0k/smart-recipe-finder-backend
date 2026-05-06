@@ -4,6 +4,7 @@ from .recipe_base import RecipeBase
 from .recipe_create import RecipeCreate
 from .recipe_draft import RecipeDraftResponse
 from .recipe_images_delete import RecipeImagesDelete
+from .recipe_tags import RecipeTagsPublic
 from .recipe_update import RecipeUpdate
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "RecipeCreate",
     "RecipeDraftResponse",
     "RecipeImagesDelete",
+    "RecipeTagsPublic",
     "RecipeUpdate",
 ]

@@ -4,6 +4,7 @@ from pydantic import ConfigDict, Field, HttpUrl, StringConstraints, field_valida
 
 from .ingredient import Ingredient
 from .recipe_base import RecipeBase
+from .recipe_tags import RecipeTagsPublic
 
 
 class Recipe(RecipeBase):
@@ -20,6 +21,7 @@ class Recipe(RecipeBase):
     status: str = "approved"
     rejection_reason: str | None = None
     has_pending_draft: bool = False
+    tags: RecipeTagsPublic | None = None
 
     @field_validator("image_urls", mode="before")
     @classmethod

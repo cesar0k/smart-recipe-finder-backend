@@ -10,6 +10,7 @@ from sqlalchemy.sql import text
 from .base import Base
 
 if TYPE_CHECKING:
+    from .recipe_tags import RecipeTags
     from .user import User
 
 
@@ -45,6 +46,12 @@ class Recipe(Base):
     # Relationship to User (lazy="raise" — must explicitly load via selectinload)
     owner: Mapped[User | None] = relationship("User", lazy="raise")
 
+    # Relationship to RecipeTags — 1:1, NULL until background task completes.
+    # lazy="noload": never auto-load (prevents N+1), returns None if not selectinloaded.
+    tags: Mapped[RecipeTags | None] = relationship(
+        "RecipeTags", back_populates="recipe", lazy="noload", uselist=False
+    )
+
     @property
     def owner_username(self) -> str | None:
         """Computed property — Pydantic reads it via from_attributes=True."""
@@ -53,6 +60,7 @@ class Recipe(Base):
         except Exception:
             # Relationship not loaded (lazy="raise" triggers error)
             return None
+
 
     @property
     def has_pending_draft(self) -> bool:

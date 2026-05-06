@@ -8,6 +8,7 @@ from .recipe import (
     RecipeCreate,
     RecipeDraftResponse,
     RecipeImagesDelete,
+    RecipeTagsPublic,
     RecipeUpdate,
 )
 from .user import (
@@ -34,6 +35,7 @@ __all__ = [
     "RecipeCreate",
     "RecipeDraftResponse",
     "RecipeImagesDelete",
+    "RecipeTagsPublic",
     "RecipeUpdate",
     "RefreshRequest",
     "TokenPair",
