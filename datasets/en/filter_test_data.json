@@ -1,91 +1,91 @@
 [
   {
     "id": 1,
-    "description": "TRAP: \"bee\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"bee\" is a substring, not a whole ingredient.",
     "include_ingredients": "bee",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Marshall Field Sandwich",
-      "\"Snick Snack\"",
-      "Borscht(Russian Beef, Vegetable Soup)"
+      "Cabbage-Sausage-Beef Goulash",
+      "Chipped Beef Gravy(Fat-Free)",
+      "Alavna'S E Z Burritos"
     ]
   },
   {
     "id": 2,
-    "description": "TRAP: \"pot\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"pot\" is a substring, not a whole ingredient.",
     "include_ingredients": "pot",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Pleasing Potato Pancakes",
-      "Potato Pancakes With Cheddar",
-      "Vegetable Latkes"
+      "Polish Pickle Soup",
+      "Jimmy Dean Breakfast Burrito",
+      "German Potato Pancakes (Kartoffelpuffer)"
     ]
   },
   {
     "id": 3,
-    "description": "TRAP: \"chi\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"chi\" is a substring, not a whole ingredient.",
     "include_ingredients": "chi",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Vegetable Latkes",
-      "Curry Chutney Chicken Salad",
-      "Easy Russian Chicken"
+      "Cabbage-Sausage-Beef Goulash",
+      "Susan'S Favorite Enchiladas",
+      "Chicken-Sausage Cassoulet"
     ]
   },
   {
     "id": 4,
-    "description": "TRAP: \"mus\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"mus\" is a substring, not a whole ingredient.",
     "include_ingredients": "mus",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Barley Soup(Ukrainian)",
-      "Poppy Seed Hamwiches",
-      "Mushroom Salad Italiano"
+      "Mushroom Salad",
+      "Mushroom Salad(France)",
+      "Zesty Sauerkraut"
     ]
   },
   {
     "id": 5,
-    "description": "TRAP: \"car\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"car\" is a substring, not a whole ingredient.",
     "include_ingredients": "car",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Vegetable Latkes",
-      "Barley Soup(Ukrainian)",
-      "Borscht(Russian Beef, Vegetable Soup)"
+      "Cherry Icebox Pie",
+      "Polish Pickle Soup",
+      "Chicken-Sausage Cassoulet"
     ]
   },
   {
     "id": 6,
-    "description": "TRAP: \"but\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"but\" is a substring, not a whole ingredient.",
     "include_ingredients": "but",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Imitation Blintzes",
-      "Royal Mazurek(Mazurek Krolewski)",
-      "Barley Soup(Ukrainian)"
+      "Sauteed Butternut Squash",
+      "Zesty Sauerkraut",
+      "Cherry Torte"
     ]
   },
   {
     "id": 7,
-    "description": "TRAP: \"nut\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"nut\" is a substring, not a whole ingredient.",
     "include_ingredients": "nut",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Coconut Torte",
-      "Polish Drumstick Cake",
-      "Russian Tea Cakes Or Mexican Wedding Balls"
+      "Sauteed Butternut Squash",
+      "Walnut And Zucchini Stuffed Chicken",
+      "German Potato Pancakes (Kartoffelpuffer)"
     ]
   },
   {
     "id": 8,
-    "description": "TRAP: \"fat\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"fat\" is a substring, not a whole ingredient.",
     "include_ingredients": "fat",
     "exclude_ingredients": "",
     "should_contain": [],
@@ -93,40 +93,40 @@
   },
   {
     "id": 9,
-    "description": "TRAP: \"rum\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"rum\" is a substring, not a whole ingredient.",
     "include_ingredients": "rum",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Grandma'S Original Homemade Potato Pancakes",
-      "Grandma'S Chicken Fricassee"
+      "Walnut And Zucchini Stuffed Chicken",
+      "Easy Meatloaf",
+      "Tortoni Squares"
     ]
   },
   {
     "id": 10,
-    "description": "TRAP: \"gin\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"gin\" is a substring, not a whole ingredient.",
     "include_ingredients": "gin",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Polish Honey Cookies"
+      "Roasted Carrot And Beet Soup"
     ]
   },
   {
     "id": 11,
-    "description": "TRAP: \"pea\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"pea\" is a substring, not a whole ingredient.",
     "include_ingredients": "pea",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Barley Soup(Ukrainian)",
-      "Polish Drumstick Cake",
-      "3 Vegetable Latkes"
+      "Beef Stroganoff Casserole With Biscuit Topping",
+      "Kiddie Chow"
     ]
   },
   {
     "id": 12,
-    "description": "TRAP: \"ale\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"ale\" is a substring, not a whole ingredient.",
     "include_ingredients": "ale",
     "exclude_ingredients": "",
     "should_contain": [],
@@ -134,29 +134,31 @@
   },
   {
     "id": 13,
-    "description": "TRAP: \"ash\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"ash\" is a substring, not a whole ingredient.",
     "include_ingredients": "ash",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Stuffed Cabbage(Moosewood Cookbook)"
+      "Sauteed Butternut Squash",
+      "Crisp Squash-And-Pepper Toss",
+      "Cheese Potato Dish"
     ]
   },
   {
     "id": 14,
-    "description": "TRAP: \"age\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"age\" is a substring, not a whole ingredient.",
     "include_ingredients": "age",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Mom'S Stuffed Cabbage  (Sweet And Sour)",
-      "\"Snick Snack\"",
-      "Borscht(Russian Beef, Vegetable Soup)"
+      "Cabbage-Sausage-Beef Goulash",
+      "Sausage-Cheese Hors D'Oeuvres",
+      "Sauteed Butternut Squash"
     ]
   },
   {
     "id": 15,
-    "description": "TRAP: \"fun\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"fun\" is a substring, not a whole ingredient.",
     "include_ingredients": "fun",
     "exclude_ingredients": "",
     "should_contain": [],
@@ -164,61 +166,60 @@
   },
   {
     "id": 16,
-    "description": "TRAP: \"men\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"men\" is a substring, not a whole ingredient.",
     "include_ingredients": "men",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Polish Sausage Casserole",
-      "Scuffletown Kraut Salad"
+      "Sauerkraut And Meat"
     ]
   },
   {
     "id": 17,
-    "description": "TRAP: \"and\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"and\" is a substring, not a whole ingredient.",
     "include_ingredients": "and",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Imitation Blintzes",
-      "Cream Cheese Blintzes",
-      "Mock Cheese Blintzes"
+      "Clam Mushroom Salad",
+      "Orange Mushroom Salad",
+      "Polish Easter Cake"
     ]
   },
   {
     "id": 18,
-    "description": "TRAP: \"or\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"or\" is a substring, not a whole ingredient.",
     "include_ingredients": "or",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Italian Sandwiches",
-      "Potato Pancakes With Cheddar",
-      "Curry Chutney Chicken Salad"
+      "Cabbage-Sausage-Beef Goulash",
+      "Cherry Icebox Pie",
+      "Alavna'S E Z Burritos"
     ]
   },
   {
     "id": 19,
-    "description": "TRAP: \"in\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"in\" is a substring, not a whole ingredient.",
     "include_ingredients": "in",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Italian Sandwiches",
-      "Imitation Blintzes",
-      "Cherry Cheese Cream Tarts"
+      "Cabbage-Sausage-Beef Goulash",
+      "Cherry Icebox Pie",
+      "Alavna'S E Z Burritos"
     ]
   },
   {
     "id": 20,
-    "description": "TRAP: \"it\" is a substring, not a whole ingredient word. Should find NOTHING.",
+    "description": "TRAP: \"it\" is a substring, not a whole ingredient.",
     "include_ingredients": "it",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Vegetable Latkes",
-      "Coconut Torte",
-      "Polish Pickles"
+      "Sauteed Butternut Squash",
+      "Braided Bread (Challah)(Makes Two Loaves)",
+      "Jean'S Mess"
     ]
   },
   {
@@ -227,9 +228,9 @@
     "include_ingredients": "beef",
     "exclude_ingredients": "",
     "should_contain": [
-      "Sauerkraut Hot Dish #1",
-      "Marshall Field Sandwich",
-      "Red Hot Lover'S Chili"
+      "Cabbage-Sausage-Beef Goulash",
+      "Chipped Beef Gravy(Fat-Free)",
+      "Alavna'S E Z Burritos"
     ],
     "should_not_contain": []
   },
@@ -239,9 +240,9 @@
     "include_ingredients": "sauerkraut",
     "exclude_ingredients": "",
     "should_contain": [
-      "Beer And Kraut Fudge Cake",
-      "Ricky Skaggs' One Pot Meal",
-      "Reuben Pie"
+      "Duck And Sauerkraut",
+      "Zesty Sauerkraut",
+      "Reuben Appetizers"
     ],
     "should_not_contain": []
   },
@@ -251,9 +252,9 @@
     "include_ingredients": "egg",
     "exclude_ingredients": "",
     "should_contain": [
-      "Potato Pancakes With Cheddar",
-      "Grandma'S Original Homemade Potato Pancakes",
-      "Mom'S Stuffed Cabbage  (Sweet And Sour)"
+      "Cherry Torte",
+      "Easy Meatloaf",
+      "German Potato Pancakes (Kartoffelpuffer)"
     ],
     "should_not_contain": []
   },
@@ -263,9 +264,9 @@
     "include_ingredients": "butter",
     "exclude_ingredients": "",
     "should_contain": [
-      "Baked Fish Chowder",
-      "Flat Armenian (Russia) Bread With Sesame Seed(Churek)",
-      "Royal Mazurek(Mazurek Krolewski)"
+      "Zesty Sauerkraut",
+      "Cherry Torte",
+      "Walnut And Zucchini Stuffed Chicken"
     ],
     "should_not_contain": []
   },
@@ -275,9 +276,9 @@
     "include_ingredients": "cabbage",
     "exclude_ingredients": "",
     "should_contain": [
-      "Mom'S Stuffed Cabbage  (Sweet And Sour)",
-      "Grandma'S Chicken Fricassee",
-      "Borscht(Russian Beef, Vegetable Soup)"
+      "Cabbage-Sausage-Beef Goulash",
+      "Polish Pickle Soup",
+      "Stuffed Cabbage In Tomato Sauce"
     ],
     "should_not_contain": []
   },
@@ -287,9 +288,9 @@
     "include_ingredients": "mushroom",
     "exclude_ingredients": "",
     "should_contain": [
-      "Wesleyan Rice",
-      "Biscuit Goulash",
-      "Turkey Goulash"
+      "Beef Stroganoff Casserole With Biscuit Topping",
+      "Jean'S Mess",
+      "Tuna Stroganoff"
     ],
     "should_not_contain": []
   },
@@ -299,21 +300,21 @@
     "include_ingredients": "sour cream",
     "exclude_ingredients": "",
     "should_contain": [
-      "Beef Stroganoff(Serves 4)",
-      "Stroganoff, Italian Style",
-      "Jewish Rye Bread Dip"
+      "Susan'S Favorite Enchiladas",
+      "Beef Stroganoff Casserole With Biscuit Topping",
+      "Cheese Potato Dish"
     ],
     "should_not_contain": []
   },
   {
     "id": 28,
-    "description": "Positive: include \"salt\".",
-    "include_ingredients": "salt",
+    "description": "Positive: include \"flour\".",
+    "include_ingredients": "flour",
     "exclude_ingredients": "",
     "should_contain": [
-      "Broiled Sirloin And Mushroom Salad",
-      "Mom Olson'S Russian Salad Dressing",
-      "Barszcz(Beet Soup)"
+      "Chipped Beef Gravy(Fat-Free)",
+      "Cherry Icebox Pie",
+      "Alavna'S E Z Burritos"
     ],
     "should_not_contain": []
   },
@@ -323,9 +324,9 @@
     "include_ingredients": "onion",
     "exclude_ingredients": "",
     "should_contain": [
-      "Pleasing Potato Pancakes",
-      "Beef Goulash(Microwave)",
-      "Grandma'S Chicken Fricassee"
+      "Cabbage-Sausage-Beef Goulash",
+      "Party Feta Appetizer",
+      "Polish Pickle Soup"
     ],
     "should_not_contain": []
   },
@@ -335,21 +336,20 @@
     "include_ingredients": "potato",
     "exclude_ingredients": "",
     "should_contain": [
-      "Dutch Potato Pancakes",
-      "Hot Cheese Chowder",
-      "Bowman'S Pot Pie"
+      "Polish Pickle Soup",
+      "Jimmy Dean Breakfast Burrito"
     ],
     "should_not_contain": []
   },
   {
     "id": 31,
-    "description": "Positive: include \"flour\".",
-    "include_ingredients": "flour",
+    "description": "Positive: include \"salt\".",
+    "include_ingredients": "salt",
     "exclude_ingredients": "",
     "should_contain": [
-      "Russian Tea Cakes Or Mexican Wedding Balls",
-      "Apple Potato Pancakes",
-      "Nalisniki(Lithuanian Crepes)"
+      "Alavna'S E Z Burritos",
+      "Mushroom Salad(France)",
+      "Sauteed Butternut Squash"
     ],
     "should_not_contain": []
   },
@@ -359,106 +359,106 @@
     "include_ingredients": "milk",
     "exclude_ingredients": "",
     "should_contain": [
-      "Bowman'S Pot Pie",
-      "Grandma'S Chicken Fricassee",
-      "Dutch Potato Pancakes"
+      "Tortellini In White Sauce",
+      "Potato Stuffing Casserole",
+      "Chicken Milano(An Easy Make-Ahead Casserole)"
     ],
     "should_not_contain": []
   },
   {
     "id": 33,
-    "description": "Positive: include \"garlic\".",
-    "include_ingredients": "garlic",
+    "description": "Positive: include \"chicken\".",
+    "include_ingredients": "chicken",
     "exclude_ingredients": "",
     "should_contain": [
-      "Turkey Goulash",
-      "Beef And Sausage Hors D'Oeuvre",
-      "Tortilla Roll Ups"
+      "Susan'S Favorite Enchiladas",
+      "Chicken-Sausage Cassoulet",
+      "Walnut And Zucchini Stuffed Chicken"
     ],
     "should_not_contain": []
   },
   {
     "id": 34,
-    "description": "Positive: include \"chicken\".",
-    "include_ingredients": "chicken",
+    "description": "Positive: include \"kielbasa\".",
+    "include_ingredients": "kielbasa",
     "exclude_ingredients": "",
     "should_contain": [
-      "Creole Chicken And Mushroom Salad",
-      "Chicken And Spinach Enchiladas(Mexican Meal)",
-      "Grandma'S Chicken Fricassee"
+      "Crisp Squash-And-Pepper Toss",
+      "Sweet And Sour Kielbasa Casserole",
+      "Clainy'S Frogmore Stew"
     ],
     "should_not_contain": []
   },
   {
     "id": 35,
-    "description": "Positive: include \"sugar\".",
-    "include_ingredients": "sugar",
+    "description": "Positive: include \"beets\".",
+    "include_ingredients": "beets",
     "exclude_ingredients": "",
     "should_contain": [
-      "Mom'S Stuffed Cabbage  (Sweet And Sour)",
-      "Polish Honey Cookies",
-      "Polish Cream Cheese Cake"
+      "Quick Borsch",
+      "Roasted Carrot And Beet Soup",
+      "Polish Beet Soup"
     ],
     "should_not_contain": []
   },
   {
     "id": 36,
-    "description": "Exclude: \"beef\" should not appear in results.",
+    "description": "Exclude: \"beef\".",
     "include_ingredients": "",
     "exclude_ingredients": "beef",
     "should_contain": [
-      "Beef Stroganoff(Serves 4)",
-      "Cheesy Chicken Fajitas"
+      "Cherry Icebox Pie",
+      "Duck And Sauerkraut"
     ],
     "should_not_contain": [
-      "Phil'S Easy Burritos",
-      "Borscht(Russian Beef, Vegetable Soup)",
-      "Easy Red Beet Soup"
+      "Cabbage-Sausage-Beef Goulash",
+      "Chipped Beef Gravy(Fat-Free)",
+      "Alavna'S E Z Burritos"
     ]
   },
   {
     "id": 37,
-    "description": "Exclude: \"sauerkraut\" should not appear in results.",
+    "description": "Exclude: \"sauerkraut\".",
     "include_ingredients": "",
     "exclude_ingredients": "sauerkraut",
     "should_contain": [
-      "Cheesy Chicken Fajitas",
-      "Vegetable Latkes"
+      "Cabbage-Sausage-Beef Goulash",
+      "Chipped Beef Gravy(Fat-Free)"
     ],
     "should_not_contain": [
-      "Mini-Reubens(Hors D'Oeuvre)",
-      "Sauerkraut Balls",
-      "Ricky Skaggs' One Pot Meal"
+      "Duck And Sauerkraut",
+      "Zesty Sauerkraut",
+      "Reuben Appetizers"
     ]
   },
   {
     "id": 38,
-    "description": "Exclude: \"egg\" should not appear in results.",
+    "description": "Exclude: \"egg\".",
     "include_ingredients": "",
     "exclude_ingredients": "egg",
     "should_contain": [
-      "Polish Pickles",
-      "Marinated Mushroom Salad"
+      "Cabbage-Sausage-Beef Goulash",
+      "Chipped Beef Gravy(Fat-Free)"
     ],
     "should_not_contain": [
-      "Royal Mazurek(Mazurek Krolewski)",
-      "Polish Kolachky",
-      "Dutch Potato Pancakes"
+      "Cherry Torte",
+      "Easy Meatloaf",
+      "German Potato Pancakes (Kartoffelpuffer)"
     ]
   },
   {
     "id": 39,
-    "description": "Exclude: \"mushroom\" should not appear in results.",
+    "description": "Exclude: \"mushroom\".",
     "include_ingredients": "",
     "exclude_ingredients": "mushroom",
     "should_contain": [
-      "Beer And Kraut Fudge Cake",
-      "Delicious Potato Pancakes"
+      "Cabbage-Sausage-Beef Goulash",
+      "Chipped Beef Gravy(Fat-Free)"
     ],
     "should_not_contain": [
-      "Turkey Goulash",
-      "Wesleyan Rice",
-      "Biscuit Goulash"
+      "Beef Stroganoff Casserole With Biscuit Topping",
+      "Jean'S Mess",
+      "Tuna Stroganoff"
     ]
   },
   {
@@ -467,13 +467,13 @@
     "include_ingredients": "cabbage",
     "exclude_ingredients": "beef",
     "should_contain": [
-      "Mom'S Stuffed Cabbage  (Sweet And Sour)",
-      "Stuffed Cabbage(Moosewood Cookbook)",
-      "Whole Stuffed Cabbage"
+      "Polish Pickle Soup",
+      "*Stuffed Cabbage With Lemon Sauce",
+      "Trish'S Polska Kielbasa Soup"
     ],
     "should_not_contain": [
-      "Busy Day Goulash Skillet",
-      "Hanky-Panks"
+      "Cabbage-Sausage-Beef Goulash",
+      "Chipped Beef Gravy(Fat-Free)"
     ]
   },
   {
@@ -482,73 +482,74 @@
     "include_ingredients": "sour cream",
     "exclude_ingredients": "mushroom",
     "should_contain": [
-      "Barley Soup(Ukrainian)",
-      "Polish Cream Cheese Cake",
-      "Beef Goulash(Microwave)"
+      "Susan'S Favorite Enchiladas",
+      "Cheese Potato Dish",
+      "Jiffy Stroganoff"
     ],
     "should_not_contain": [
-      "Biscuit Goulash",
-      "Wesleyan Rice"
+      "Beef Stroganoff Casserole With Biscuit Topping",
+      "Jean'S Mess"
     ]
   },
   {
     "id": 42,
-    "description": "Combined: include \"onion\", exclude \"sauerkraut\".",
-    "include_ingredients": "onion",
+    "description": "Combined: include \"potato\", exclude \"sauerkraut\".",
+    "include_ingredients": "potato",
     "exclude_ingredients": "sauerkraut",
     "should_contain": [
-      "Pleasing Potato Pancakes",
-      "Potato Pancakes With Cheddar",
-      "Vegetable Latkes"
+      "Polish Pickle Soup",
+      "Jimmy Dean Breakfast Burrito"
     ],
     "should_not_contain": [
-      "Beer And Kraut Fudge Cake",
-      "Mini-Reubens(Hors D'Oeuvre)"
+      "Duck And Sauerkraut",
+      "Zesty Sauerkraut"
     ]
   },
   {
     "id": 43,
-    "description": "TRAP: \"pan\" substring should not match whole ingredients.",
+    "description": "TRAP: \"pan\" substring.",
     "include_ingredients": "pan",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Nuria'S Russian Salad"
+      "Fried Fish Batter"
     ]
   },
   {
     "id": 44,
-    "description": "TRAP: \"eat\" substring should not match whole ingredients.",
+    "description": "TRAP: \"eat\" substring.",
     "include_ingredients": "eat",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Mom'S Stuffed Cabbage  (Sweet And Sour)",
-      "Grandma'S Chicken Fricassee"
+      "Easy Meatloaf"
     ]
   },
   {
     "id": 45,
-    "description": "TRAP: \"ice\" substring should not match whole ingredients.",
+    "description": "TRAP: \"ice\" substring.",
     "include_ingredients": "ice",
     "exclude_ingredients": "",
     "should_contain": [],
     "should_not_contain": [
-      "Imitation Blintzes",
-      "Cherry Cheese Cream Tarts"
+      "Polish Pickle Soup",
+      "Walnut And Zucchini Stuffed Chicken"
     ]
   },
   {
     "id": 46,
-    "description": "TRAP: \"raw\" substring should not match whole ingredients.",
+    "description": "TRAP: \"raw\" substring.",
     "include_ingredients": "raw",
     "exclude_ingredients": "",
     "should_contain": [],
-    "should_not_contain": []
+    "should_not_contain": [
+      "Skillet Pork And Sauerkraut",
+      "Sauerkraut And Meat"
+    ]
   },
   {
     "id": 47,
-    "description": "TRAP: \"dry\" substring should not match whole ingredients.",
+    "description": "TRAP: \"dry\" substring.",
     "include_ingredients": "dry",
     "exclude_ingredients": "",
     "should_contain": [],
@@ -556,7 +557,7 @@
   },
   {
     "id": 48,
-    "description": "TRAP: \"hot\" substring should not match whole ingredients.",
+    "description": "TRAP: \"hot\" substring.",
     "include_ingredients": "hot",
     "exclude_ingredients": "",
     "should_contain": [],
@@ -564,7 +565,7 @@
   },
   {
     "id": 49,
-    "description": "TRAP: \"any\" substring should not match whole ingredients.",
+    "description": "TRAP: \"any\" substring.",
     "include_ingredients": "any",
     "exclude_ingredients": "",
     "should_contain": [],
@@ -572,10 +573,12 @@
   },
   {
     "id": 50,
-    "description": "TRAP: \"top\" substring should not match whole ingredients.",
+    "description": "TRAP: \"top\" substring.",
     "include_ingredients": "top",
     "exclude_ingredients": "",
     "should_contain": [],
-    "should_not_contain": []
+    "should_not_contain": [
+      "Blueberry Torte"
+    ]
   }
 ]
