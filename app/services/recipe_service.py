@@ -139,7 +139,14 @@ def _is_positive_only_intent(tag_filter: dict[str, Any]) -> bool:
     Fields that stay in vector-first path:
       spice_level, occasion, cost_tier, technique_difficulty, allergens
     """
-    SQL_FIRST_FIELDS = {"vegetarian", "vegan", "gluten_free", "dairy_free", "meal_type", "main_protein"}  # noqa: E501
+    SQL_FIRST_FIELDS = {
+        "vegetarian",
+        "vegan",
+        "gluten_free",
+        "dairy_free",
+        "meal_type",
+        "main_protein",
+    }  # noqa: E501
     negation_indicators = {"main_protein": "none"}
 
     for field, expected in tag_filter.items():
@@ -398,6 +405,83 @@ async def get_distinct_cuisines_cached(db: AsyncSession, cache: Cache | None = N
     return result
 
 
+# Ordered list of meal_type categories to show on the homepage.
+# Only categories with enough recipes are shown; others are skipped.
+HOMEPAGE_CATEGORIES: list[tuple[str, str]] = [
+    ("soup", "Супы"),
+    ("dinner", "Ужины"),
+    ("breakfast", "Завтраки"),
+    ("dessert", "Десерты"),
+    ("salad", "Салаты"),
+    ("side", "Гарниры"),
+    ("snack", "Закуски"),
+    ("lunch", "Обеды"),
+]
+_MIN_RECIPES_PER_CATEGORY = 2
+
+
+async def get_recipes_by_categories(
+    db: AsyncSession,
+    *,
+    limit_per: int = 6,
+    cache: Cache | None = None,
+) -> list[dict]:
+    """Return recipes grouped by meal_type for the homepage category shelves.
+
+    Each item: {"meal_type": str, "label": str, "recipes": list[Recipe]}
+    Only categories with at least _MIN_RECIPES_PER_CATEGORY recipes are included.
+    Results are cached per limit_per value.
+    """
+    if cache is not None:
+        key = cache_keys.categories(limit_per)
+        cached = await cache.get_raw(key)
+        if cached is not None:
+            # Cached as JSON; we need ORM objects for schema validation.
+            # Store only ids and re-fetch — or skip cache for ORM objects.
+            # Simpler: cache the serialised list and return dicts directly.
+            return json.loads(cached)  # type: ignore[no-any-return]
+
+    result: list[dict] = []
+
+    for meal_type, label in HOMEPAGE_CATEGORIES:
+        query = (
+            _with_owner(
+                select(Recipe)
+                .join(RecipeTags, Recipe.id == RecipeTags.recipe_id)
+                .where(
+                    Recipe.status == "approved",
+                    RecipeTags.meal_type == meal_type,
+                )
+                .options(selectinload(Recipe.tags))
+            )
+            .order_by(Recipe.id.desc())
+            .limit(limit_per)
+        )
+        rows = await db.execute(query)
+        recipes = rows.scalars().unique().all()
+
+        if len(recipes) < _MIN_RECIPES_PER_CATEGORY:
+            continue
+
+        from app import schemas as _schemas
+
+        result.append(
+            {
+                "meal_type": meal_type,
+                "label": label,
+                "recipes": [
+                    json.loads(_schemas.Recipe.model_validate(r).model_dump_json()) for r in recipes
+                ],
+            }
+        )
+
+    if cache is not None:
+        key = cache_keys.categories(limit_per)
+        await cache.set_raw(key, json.dumps(result), ttl=cache_keys.TTL_CATEGORIES)
+
+    return result
+
+
 async def create_recipe(
     db: AsyncSession,
     *,
@@ -470,9 +554,17 @@ async def get_all_recipes(
     max_time: int | None = None,
     difficulty: str | None = None,
     cuisine: str | None = None,
+    meal_type: str | None = None,
 ) -> Sequence[Recipe]:
     """Public feed — only approved recipes. Always."""
     query = _with_owner(select(Recipe).where(Recipe.status == "approved"))
+
+    # meal_type filter via RecipeTags join (used by "Show all" on category shelves)
+    if meal_type:
+        query = query.join(RecipeTags, Recipe.id == RecipeTags.recipe_id).where(
+            RecipeTags.meal_type == meal_type
+        )
+
     query = _apply_filters(
         query,
         include_str,
