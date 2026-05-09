@@ -93,6 +93,13 @@ async def seed(lang: str) -> None:
     await _redis.aclose()
     print(" - Redis cache cleared.")
 
+    print("Clearing Minio bucket...")
+    try:
+        deleted = await s3_client.clear_bucket()
+        print(f" - Deleted {deleted} object(s) from Minio.")
+    except Exception as ex:
+        print(f" - Warning: could not clear Minio bucket: {ex}")
+
     has_photos_dir = RECIPE_PHOTOS_PATH.exists() and any(RECIPE_PHOTOS_PATH.iterdir())
     if has_photos_dir:
         print(f" - Found local photos at {RECIPE_PHOTOS_PATH}")
