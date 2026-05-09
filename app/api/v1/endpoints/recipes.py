@@ -42,6 +42,21 @@ async def get_cuisines(
     return await recipe_service.get_distinct_cuisines_cached(db, cache=cache)
 
 
+@router.get("/categories", operation_id="get_recipe_categories")
+async def get_recipe_categories(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[Cache, Depends(get_cache)],
+    limit_per: int = Query(6, ge=2, le=20, description="Recipes per category"),
+) -> list[dict]:
+    """Return recipes grouped by meal type for the homepage category shelves.
+
+    Each item: {meal_type, label, recipes[]}. Only categories with enough recipes
+    are included. Results are cached.
+    """
+    return await recipe_service.get_recipes_by_categories(db, limit_per=limit_per, cache=cache)
+
+
 @router.get("/", response_model=list[schemas.Recipe], operation_id="read_recipes")
 async def read_recipes(
     *,
@@ -58,6 +73,7 @@ async def read_recipes(
     max_time: int | None = Query(None, ge=0, description="Max cooking time in minutes"),
     difficulty: str | None = Query(None, description="Comma-separated: easy,medium,hard"),
     cuisine: str | None = Query(None, description="Comma-separated cuisine values"),
+    meal_type: str | None = Query(None, description="Filter by meal_type tag (e.g. soup, dessert)"),
 ) -> list[schemas.Recipe]:
     recipes = await recipe_service.get_all_recipes(
         db=db,
@@ -69,6 +85,7 @@ async def read_recipes(
         max_time=max_time,
         difficulty=difficulty,
         cuisine=cuisine,
+        meal_type=meal_type,
     )
     return [schemas.Recipe.model_validate(r) for r in recipes]
 
