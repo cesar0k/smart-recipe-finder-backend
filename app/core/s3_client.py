@@ -69,6 +69,40 @@ class S3Client:
         except Exception as ex:
             logger.error(f"S3 image delete failed: {ex}")
 
+    async def clear_bucket(self) -> int:
+        """
+        Delete all objects in the bucket.
+        Uses paginated listing to handle buckets with more than 1000 objects.
+        Returns the total number of deleted objects.
+        """
+        deleted_count = 0
+        paginator = self.client.get_paginator("list_objects_v2")
+
+        async def _delete_page(objects: list[dict]) -> None:
+            nonlocal deleted_count
+            await asyncio.to_thread(
+                self.client.delete_objects,
+                Bucket=settings.S3_BUCKET_NAME,
+                Delete={"Objects": [{"Key": obj["Key"]} for obj in objects], "Quiet": True},
+            )
+            deleted_count += len(objects)
+
+        try:
+            pages = await asyncio.to_thread(
+                lambda: list(
+                    paginator.paginate(Bucket=settings.S3_BUCKET_NAME)
+                )
+            )
+            for page in pages:
+                objects = page.get("Contents", [])
+                if objects:
+                    await _delete_page(objects)
+        except ClientError as ex:
+            logger.error(f"S3 bucket clear failed: {ex}")
+            raise ex
+
+        return deleted_count
+
     async def ensure_bucket_exists(self) -> None:
         try:
             await asyncio.to_thread(
