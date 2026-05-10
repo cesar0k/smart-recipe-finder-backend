@@ -95,10 +95,7 @@ async def transfer_admin(target: str) -> None:
         db.add(target_user)
         await db.commit()
 
-        print(
-            f"Admin transferred: {old_username} → user, "
-            f"{target_user.username} → admin"
-        )
+        print(f"Admin transferred: {old_username} → user, {target_user.username} → admin")
 
 
 def main() -> None:
@@ -113,7 +110,12 @@ def main() -> None:
 
     # transfer
     transfer_parser = subparsers.add_parser("transfer", help="Transfer admin role to another user")
-    transfer_parser.add_argument("--to", required=True, dest="target", help="Username or email of the new admin")
+    transfer_parser.add_argument(
+        "--to",
+        required=True,
+        dest="target",
+        help="Username or email of the new admin",
+    )
 
     args = parser.parse_args()
 

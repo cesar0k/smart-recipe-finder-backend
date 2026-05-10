@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,7 +48,7 @@ async def get_recipe_categories(
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[Cache, Depends(get_cache)],
     limit_per: int = Query(6, ge=2, le=20, description="Recipes per category"),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return recipes grouped by meal type for the homepage category shelves.
 
     Each item: {meal_type, label, recipes[]}. Only categories with enough recipes
