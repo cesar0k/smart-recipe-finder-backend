@@ -425,7 +425,7 @@ async def get_recipes_by_categories(
     *,
     limit_per: int = 6,
     cache: Cache | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return recipes grouped by meal_type for the homepage category shelves.
 
     Each item: {"meal_type": str, "label": str, "recipes": list[Recipe]}
@@ -441,7 +441,7 @@ async def get_recipes_by_categories(
             # Simpler: cache the serialised list and return dicts directly.
             return json.loads(cached)  # type: ignore[no-any-return]
 
-    result: list[dict] = []
+    result: list[dict[str, Any]] = []
 
     for meal_type, label in HOMEPAGE_CATEGORIES:
         query = (

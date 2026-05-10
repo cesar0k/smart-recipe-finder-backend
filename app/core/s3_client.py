@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import BinaryIO
+from typing import Any, BinaryIO, cast
 from urllib.parse import urlparse
 
 import boto3
@@ -25,9 +25,7 @@ class S3Client:
             config=Config(signature_version="s3v4"),
         )
 
-    async def upload_file(
-        self, file_obj: BinaryIO, object_name: str, content_type: str
-    ) -> str:
+    async def upload_file(self, file_obj: BinaryIO, object_name: str, content_type: str) -> str:
         try:
             await asyncio.to_thread(
                 self.client.upload_fileobj,
@@ -37,9 +35,7 @@ class S3Client:
                 ExtraArgs={"ContentType": content_type},
             )
 
-            return (
-                f"{settings.S3_PUBLIC_ENDPOINT}/{settings.S3_BUCKET_NAME}/{object_name}"
-            )
+            return f"{settings.S3_PUBLIC_ENDPOINT}/{settings.S3_BUCKET_NAME}/{object_name}"
 
         except ClientError as ex:
             logger.error(f"S3 file upload failed: {ex}")
@@ -78,7 +74,7 @@ class S3Client:
         deleted_count = 0
         paginator = self.client.get_paginator("list_objects_v2")
 
-        async def _delete_page(objects: list[dict]) -> None:
+        async def _delete_page(objects: list[dict[str, Any]]) -> None:
             nonlocal deleted_count
             await asyncio.to_thread(
                 self.client.delete_objects,
@@ -89,12 +85,12 @@ class S3Client:
 
         try:
             pages = await asyncio.to_thread(
-                lambda: list(
-                    paginator.paginate(Bucket=settings.S3_BUCKET_NAME)
-                )
+                lambda: list(paginator.paginate(Bucket=settings.S3_BUCKET_NAME))
             )
             for page in pages:
-                objects = page.get("Contents", [])
+                # boto3 stubs type these as ObjectTypeDef (TypedDict). We only
+                # touch the "Key" field, so cast to plain dicts for the helper.
+                objects = cast(list[dict[str, Any]], page.get("Contents", []))
                 if objects:
                     await _delete_page(objects)
         except ClientError as ex:
@@ -105,14 +101,10 @@ class S3Client:
 
     async def ensure_bucket_exists(self) -> None:
         try:
-            await asyncio.to_thread(
-                self.client.head_bucket, Bucket=settings.S3_BUCKET_NAME
-            )
+            await asyncio.to_thread(self.client.head_bucket, Bucket=settings.S3_BUCKET_NAME)
         except ClientError:
             logger.info(f"Bucket {settings.S3_BUCKET_NAME} not found. Creating...")
-            await asyncio.to_thread(
-                self.client.create_bucket, Bucket=settings.S3_BUCKET_NAME
-            )
+            await asyncio.to_thread(self.client.create_bucket, Bucket=settings.S3_BUCKET_NAME)
 
             policy = {
                 "Version": "2012-10-17",

@@ -63,6 +63,10 @@ class Settings(BaseSettings):
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
+    # Caps for downloading a Google profile picture into our own S3 bucket
+    # at registration time (see user_service.set_avatar_from_remote_url).
+    GOOGLE_AVATAR_FETCH_TIMEOUT_SECONDS: float = 5.0
+    GOOGLE_AVATAR_MAX_BYTES: int = 5 * 1024 * 1024  # 5 MiB
 
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379

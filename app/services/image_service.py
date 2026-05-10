@@ -15,9 +15,14 @@ THUMB_MAX_WIDTH = 400
 THUMB_QUALITY = 60
 
 
-async def validate_and_process_image(file: UploadFile) -> BytesIO:
-    await file.seek(0)
-    content: bytes = await file.read()
+def validate_image_bytes(content: bytes) -> bytes:
+    """Validate raw image bytes against project size / MIME / dimension limits.
+
+    Mirrors the rules enforced by ``validate_and_process_image`` so that
+    images sourced outside the FastAPI request lifecycle (e.g. a Google
+    avatar downloaded at registration) go through the exact same guardrails.
+    Returns the input bytes on success; raises HTTPException on failure.
+    """
     file_size: int = len(content)
 
     if file_size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
@@ -48,11 +53,16 @@ async def validate_and_process_image(file: UploadFile) -> BytesIO:
                     f"Max {settings.MAX_IMAGE_WIDTH}x{settings.MAX_IMAGE_HEIGHT}"
                 ),
             )
-
-        return BytesIO(content)
-
     except UnidentifiedImageError:
         raise HTTPException(status_code=400, detail="Invalid image file") from None
+
+    return content
+
+
+async def validate_and_process_image(file: UploadFile) -> BytesIO:
+    await file.seek(0)
+    content: bytes = await file.read()
+    return BytesIO(validate_image_bytes(content))
 
 
 BROWSER_SAFE_FORMATS = {"JPEG", "PNG", "WEBP"}

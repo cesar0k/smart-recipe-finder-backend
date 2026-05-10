@@ -1,25 +1,45 @@
+import logging
 import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from fastapi import UploadFile
+import httpx
+from fastapi import HTTPException, UploadFile
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app import schemas
 from app.core.cache import Cache
+from app.core.config import settings
 from app.core.exceptions import (
     InvalidStateError,
     NotAuthorizedError,
     NotFoundError,
 )
 from app.core.s3_client import s3_client
+from app.db.session import AsyncSessionLocal
 from app.models.recipe import Recipe
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.services import cache_keys, image_service
+
+# Substrings used to identify a Google-CDN avatar URL we want to migrate
+# into our own bucket — referenced by the backfill script too.
+GOOGLE_AVATAR_DOMAINS: tuple[str, ...] = ("googleusercontent.com", "googleapis.com")
+
+logger = logging.getLogger(__name__)
+
+
+class _RemoteImageError(Exception):
+    """Raised for non-retryable failures while fetching a remote avatar."""
 
 
 async def get_user_by_id(db: AsyncSession, *, user_id: int) -> User | None:
@@ -254,3 +274,121 @@ async def upload_avatar(
     if cache is not None:
         await cache_keys.invalidate_on_user_change(cache, user_id=user.id)
     return user
+
+
+async def _fetch_remote_image_bytes(url: str) -> bytes:
+    """Stream a remote image into memory, capped at GOOGLE_AVATAR_MAX_BYTES.
+
+    Raises ``_RemoteImageError`` (non-retryable) for HTTP 4xx and oversize
+    responses; lets ``httpx.HTTPError`` (timeouts, connect errors, 5xx)
+    bubble up so the surrounding ``tenacity`` decorator can retry.
+    """
+    timeout = httpx.Timeout(settings.GOOGLE_AVATAR_FETCH_TIMEOUT_SECONDS)
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        async with client.stream("GET", url) as response:
+            if 400 <= response.status_code < 500:
+                raise _RemoteImageError(f"Remote image responded with {response.status_code}")
+            response.raise_for_status()
+
+            buf = bytearray()
+            async for chunk in response.aiter_bytes():
+                buf.extend(chunk)
+                if len(buf) > settings.GOOGLE_AVATAR_MAX_BYTES:
+                    raise _RemoteImageError(
+                        f"Remote image exceeds {settings.GOOGLE_AVATAR_MAX_BYTES} bytes"
+                    )
+            return bytes(buf)
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(min=2, max=10),
+    retry=retry_if_exception_type(httpx.HTTPError),
+    reraise=True,
+)
+async def _fetch_remote_image_bytes_with_retry(url: str) -> bytes:
+    return await _fetch_remote_image_bytes(url)
+
+
+async def set_avatar_from_remote_url(
+    db: AsyncSession,
+    *,
+    user: User,
+    url: str,
+    cache: Cache | None = None,
+) -> User:
+    """Best-effort: download a remote image, validate it, and store it in our S3.
+
+    On any failure (network, validation, S3) the user is returned unchanged
+    and a warning is logged. Used for Google profile pictures captured at
+    OAuth registration and for the offline backfill script.
+    """
+    try:
+        raw = await _fetch_remote_image_bytes_with_retry(url)
+    except (_RemoteImageError, httpx.HTTPError) as exc:
+        logger.warning(
+            "set_avatar_from_remote_url: download failed for user %s url=%s: %s",
+            user.id,
+            url,
+            exc,
+        )
+        return user
+
+    try:
+        validated = image_service.validate_image_bytes(raw)
+        converted, content_type, extension = image_service.ensure_browser_compatible(validated)
+    except HTTPException as exc:
+        logger.warning(
+            "set_avatar_from_remote_url: validation failed for user %s url=%s: %s",
+            user.id,
+            url,
+            exc.detail,
+        )
+        return user
+
+    obj_name = f"avatars/{user.id}/{uuid.uuid4()}.{extension}"
+    previous_avatar = user.avatar_url
+
+    try:
+        new_url = await s3_client.upload_file(converted, obj_name, content_type)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("set_avatar_from_remote_url: S3 upload failed for user %s: %s", user.id, exc)
+        return user
+
+    user.avatar_url = new_url
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    # Best-effort cleanup of the previous avatar (only deletes if it points
+    # at our own bucket — see s3_client.delete_image_from_s3 for the guard).
+    if previous_avatar:
+        await s3_client.delete_image_from_s3(previous_avatar)
+
+    if cache is not None:
+        await cache_keys.invalidate_on_user_change(cache, user_id=user.id)
+
+    return user
+
+
+async def set_avatar_from_remote_url_background(user_id: int, url: str) -> None:
+    """Run ``set_avatar_from_remote_url`` in its own DB session.
+
+    Designed to be scheduled with ``asyncio.create_task`` after the
+    originating HTTP response has been returned, so registration latency is
+    not bound to Google CDN download speed. Errors are already swallowed by
+    ``set_avatar_from_remote_url``; this wrapper only adds session
+    management and a final safety-net log.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await get_user_by_id(db, user_id=user_id)
+            if user is None:
+                return
+            await set_avatar_from_remote_url(db, user=user, url=url)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "set_avatar_from_remote_url_background: crashed for user %s: %s",
+            user_id,
+            exc,
+        )
