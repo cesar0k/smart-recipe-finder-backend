@@ -61,6 +61,7 @@ async def get_recipe_categories(
 async def read_recipes(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     include_ingredients: str | None = Query(
@@ -74,6 +75,11 @@ async def read_recipes(
     difficulty: str | None = Query(None, description="Comma-separated: easy,medium,hard"),
     cuisine: str | None = Query(None, description="Comma-separated cuisine values"),
     meal_type: str | None = Query(None, description="Filter by meal_type tag (e.g. soup, dessert)"),
+    sort: str = Query(
+        "newest",
+        pattern="^(newest|popular)$",
+        description="Sort order: newest (default) or popular (by favorites_count)",
+    ),
 ) -> list[schemas.Recipe]:
     recipes = await recipe_service.get_all_recipes(
         db=db,
@@ -86,8 +92,9 @@ async def read_recipes(
         difficulty=difficulty,
         cuisine=cuisine,
         meal_type=meal_type,
+        sort=sort,
     )
-    return [schemas.Recipe.model_validate(r) for r in recipes]
+    return await recipe_service.enrich_recipes_for_caller(db, recipes=recipes, viewer=current_user)
 
 
 @router.get("/my/", response_model=list[schemas.Recipe], operation_id="read_my_recipes")
@@ -105,7 +112,7 @@ async def read_my_recipes(
         limit=limit,
         include_pending_drafts=True,
     )
-    return [schemas.Recipe.model_validate(r) for r in recipes]
+    return await recipe_service.enrich_recipes_for_caller(db, recipes=recipes, viewer=current_user)
 
 
 @router.get(
@@ -129,7 +136,7 @@ async def read_user_recipes(
         skip=skip,
         limit=limit,
     )
-    return [schemas.Recipe.model_validate(r) for r in recipes]
+    return await recipe_service.enrich_recipes_for_caller(db, recipes=recipes, viewer=current_user)
 
 
 @router.get("/search/", response_model=list[schemas.Recipe], operation_id="search_recipes")
@@ -137,6 +144,7 @@ async def search_recipes(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[Cache, Depends(get_cache)],
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
     q: str = Query(..., description="Search query for recipes using vector search", max_length=200),
     include_ingredients: str | None = Query(
         None, description="Comma-separated ingredients to include", max_length=500
@@ -148,6 +156,13 @@ async def search_recipes(
     max_time: int | None = Query(None, ge=0, description="Max cooking time in minutes"),
     difficulty: str | None = Query(None, description="Comma-separated: easy,medium,hard"),
     cuisine: str | None = Query(None, description="Comma-separated cuisine values"),
+    sort: str = Query(
+        "newest",
+        pattern="^(newest|popular)$",
+        description="Sort order applied AFTER relevance filtering: "
+        "'newest' (default) keeps vector-distance order, 'popular' re-orders "
+        "the result set by favorites_count.",
+    ),
 ) -> list[schemas.Recipe]:
     if not is_embedding_model_ready():
         raise HTTPException(
@@ -164,9 +179,10 @@ async def search_recipes(
         max_time=max_time,
         difficulty=difficulty,
         cuisine=cuisine,
+        sort=sort,
         cache=cache,
     )
-    return [schemas.Recipe.model_validate(r) for r in recipes]
+    return await recipe_service.enrich_recipes_for_caller(db, recipes=recipes, viewer=current_user)
 
 
 @router.get("/{recipe_id}", response_model=schemas.Recipe, operation_id="read_recipe_by_id")
@@ -191,6 +207,7 @@ async def read_similar_recipes(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[Cache, Depends(get_cache)],
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
     recipe_id: int,
     limit: int = Query(settings.SIMILAR_RECIPES_MAX, ge=1, le=20),
     threshold: float = Query(
@@ -208,7 +225,7 @@ async def read_similar_recipes(
     recipes = await recipe_service.get_similar_recipes(
         db=db, recipe_id=recipe_id, threshold=threshold, limit=limit, cache=cache
     )
-    return [schemas.Recipe.model_validate(r) for r in recipes]
+    return await recipe_service.enrich_recipes_for_caller(db, recipes=recipes, viewer=current_user)
 
 
 @router.patch(
