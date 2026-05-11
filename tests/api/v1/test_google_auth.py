@@ -1,11 +1,4 @@
-"""Tests for Google avatar persistence in google_auth_service.
-
-Cover the new behaviour: at registration we kick off a background task that
-downloads the Google profile picture into our own S3 bucket. We test the
-service-layer plumbing (the background coroutine is scheduled with the
-correct arguments) and the underlying ``set_avatar_from_remote_url``
-helper (happy path + download failure).
-"""
+"""Tests for Google avatar persistence in google_auth_service."""
 
 from __future__ import annotations
 

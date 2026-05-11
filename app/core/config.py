@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     GOOGLE_AVATAR_FETCH_TIMEOUT_SECONDS: float = 5.0
     GOOGLE_AVATAR_MAX_BYTES: int = 5 * 1024 * 1024  # 5 MiB
 
+    # Max recipe IDs accepted per GET /favorites/check request.
+    FAVORITES_CHECK_MAX_IDS: int = 200
+
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
