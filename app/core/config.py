@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     ]
     MAX_IMAGE_WIDTH: int = 8192
     MAX_IMAGE_HEIGHT: int = 8192
+    IMAGE_FULL_MAX_WIDTH: int = 1200  # px; full-size WebP output
+    IMAGE_FULL_QUALITY: int = 85      # WebP quality for full-size variant
+    IMAGE_THUMB_MAX_WIDTH: int = 400  # px; thumbnail WebP output
+    IMAGE_THUMB_QUALITY: int = 60     # WebP quality for thumbnail variant
 
     EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large-instruct"
     LLM_MODEL: str = "google/gemini-3-flash-preview"  # openrouter/router model; override via .env
