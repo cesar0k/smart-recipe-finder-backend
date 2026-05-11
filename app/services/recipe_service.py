@@ -29,7 +29,7 @@ from app.models import Recipe, RecipeTags
 from app.models.recipe_draft import RecipeDraft
 from app.models.user import User
 from app.schemas import RecipeCreate, RecipeUpdate
-from app.services import cache_keys, image_service, search_cache, similar_cache
+from app.services import cache_keys, favorite_service, image_service, search_cache, similar_cache
 
 __all__ = [
     "create_recipe",
@@ -173,6 +173,7 @@ async def _sql_tag_search(
     difficulty: str | None,
     cuisine: str | None,
     hard_limit: int,
+    sort: str = "newest",
 ) -> list[Recipe]:
     """SQL-first search: fetch all recipes matching tags, re-rank by vector similarity."""
     # Build SQL filter for RecipeTags
@@ -222,7 +223,11 @@ async def _sql_tag_search(
 
     recipes_map = {r.id: r for r in candidates}
     top = ranked[:hard_limit]
-    return [recipes_map[rid] for rid, _ in top if rid in recipes_map]
+    final = [recipes_map[rid] for rid, _ in top if rid in recipes_map]
+
+    if sort == "popular":
+        final.sort(key=lambda r: (-(r.favorites_count or 0), -r.id))
+    return final
 
 
 def _apply_adaptive_limit(
@@ -555,8 +560,13 @@ async def get_all_recipes(
     difficulty: str | None = None,
     cuisine: str | None = None,
     meal_type: str | None = None,
+    sort: str = "newest",
 ) -> Sequence[Recipe]:
-    """Public feed — only approved recipes. Always."""
+    """Public feed — only approved recipes. Always.
+
+    ``sort`` accepts ``"newest"`` (default, ``id DESC``) or ``"popular"``
+    (``favorites_count DESC, id DESC`` — id break tie deterministically).
+    """
     query = _with_owner(select(Recipe).where(Recipe.status == "approved"))
 
     # meal_type filter via RecipeTags join (used by "Show all" on category shelves)
@@ -574,7 +584,10 @@ async def get_all_recipes(
         difficulty=difficulty,
         cuisine=cuisine,
     )
-    query = query.order_by(Recipe.id.desc())
+    if sort == "popular":
+        query = query.order_by(Recipe.favorites_count.desc(), Recipe.id.desc())
+    else:
+        query = query.order_by(Recipe.id.desc())
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
@@ -649,27 +662,68 @@ async def get_recipe_for_caller(
     - Approved recipes are cached and visible to everyone.
     - Non-approved recipes are visible only to owner / mod / admin and never cached.
     - Raises NotFoundError when missing or not visible.
+
+    ``is_favorited`` is set per-caller AFTER the cache read — the cached
+    payload itself stays user-agnostic.
     """
     key = cache_keys.recipe_detail(recipe_id)
+    response: schemas.Recipe | None = None
+
     if cache is not None:
         cached = await cache.get_model(key, schemas.Recipe)
         if cached is not None and cached.status == "approved":
-            return cached
+            response = cached
 
-    recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
-    if recipe is None:
-        raise NotFoundError("Recipe not found")
-
-    if recipe.status != "approved":
-        is_owner = current_user is not None and recipe.owner_id == current_user.id
-        is_mod = current_user is not None and current_user.role in ("moderator", "admin")
-        if not (is_owner or is_mod):
+    if response is None:
+        recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
+        if recipe is None:
             raise NotFoundError("Recipe not found")
 
-    response = schemas.Recipe.model_validate(recipe)
-    if response.status == "approved" and cache is not None:
-        await cache.set_model(key, response, ttl=cache_keys.TTL_RECIPE_DETAIL)
+        if recipe.status != "approved":
+            is_owner = current_user is not None and recipe.owner_id == current_user.id
+            is_mod = current_user is not None and current_user.role in (
+                "moderator",
+                "admin",
+            )
+            if not (is_owner or is_mod):
+                raise NotFoundError("Recipe not found")
+
+        response = schemas.Recipe.model_validate(recipe)
+        if response.status == "approved" and cache is not None:
+            await cache.set_model(key, response, ttl=cache_keys.TTL_RECIPE_DETAIL)
+
+    if current_user is not None and response.status == "approved":
+        favorited = await favorite_service.get_favorited_recipe_ids(
+            db, user_id=current_user.id, recipe_ids=[recipe_id]
+        )
+        # Fresh copy so we don't mutate the cached instance.
+        response = response.model_copy(update={"is_favorited": recipe_id in favorited})
+
     return response
+
+
+async def enrich_recipes_for_caller(
+    db: AsyncSession,
+    *,
+    recipes: Sequence[Recipe],
+    viewer: User | None,
+) -> list[schemas.Recipe]:
+    """Validate ORM rows into ``Recipe`` schemas and attach ``is_favorited``.
+
+    Single-batched lookup — N+1 safe. Anonymous viewers skip the DB hit.
+    """
+    response = [schemas.Recipe.model_validate(r) for r in recipes]
+    if viewer is None or not response:
+        return response
+
+    favorited = await favorite_service.get_favorited_recipe_ids(
+        db, user_id=viewer.id, recipe_ids=[r.id for r in response]
+    )
+    if not favorited:
+        return response
+    return [
+        r.model_copy(update={"is_favorited": True}) if r.id in favorited else r for r in response
+    ]
 
 
 async def get_recipe_by_id(db: AsyncSession, *, recipe_id: int) -> Recipe | None:
@@ -1047,6 +1101,7 @@ async def search_recipes_by_vector(
     max_time: int | None = None,
     difficulty: str | None = None,
     cuisine: str | None = None,
+    sort: str = "newest",
     cache: Cache | None = None,
 ) -> list[Recipe]:
     search_pairs: list[tuple[int, float]] | None = None
@@ -1103,6 +1158,7 @@ async def search_recipes_by_vector(
             difficulty,
             cuisine,
             hard_limit=settings.SEARCH_HARD_LIMIT,
+            sort=sort,
         )
 
     result = await db.execute(query)
@@ -1127,7 +1183,13 @@ async def search_recipes_by_vector(
         rel_margin=settings.SEARCH_RELATIVE_MARGIN,
         hard_limit=settings.SEARCH_HARD_LIMIT,
     )
-    return [recipes_map[rid] for rid, _ in adaptive]
+    final = [recipes_map[rid] for rid, _ in adaptive]
+
+    # sort=popular re-orders the relevance-trimmed result set by
+    # favorites_count (id DESC tiebreaker); sort=newest keeps vector order.
+    if sort == "popular":
+        final.sort(key=lambda r: (-(r.favorites_count or 0), -r.id))
+    return final
 
 
 async def get_similar_recipes(

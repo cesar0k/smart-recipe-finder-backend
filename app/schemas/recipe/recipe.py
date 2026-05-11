@@ -22,6 +22,10 @@ class Recipe(RecipeBase):
     rejection_reason: str | None = None
     has_pending_draft: bool = False
     tags: RecipeTagsPublic | None = None
+    favorites_count: int = 0
+    # Caller-aware: attached by the service layer after cache read; the
+    # cached payload itself stays user-agnostic.
+    is_favorited: bool = False
 
     @field_validator("image_urls", mode="before")
     @classmethod

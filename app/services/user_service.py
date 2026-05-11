@@ -31,8 +31,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.services import cache_keys, image_service
 
-# Substrings used to identify a Google-CDN avatar URL we want to migrate
-# into our own bucket — referenced by the backfill script too.
+# Google-CDN avatar URL substrings — referenced by the backfill script too.
 GOOGLE_AVATAR_DOMAINS: tuple[str, ...] = ("googleusercontent.com", "googleapis.com")
 
 logger = logging.getLogger(__name__)

@@ -15,9 +15,7 @@ from app.services.user_service import (
 
 logger = logging.getLogger(__name__)
 
-# Google avatar URLs typically end in `=s96-c` (96px crop).
-# Bump that to a size that looks reasonable on profile pages without
-# wasting bytes if we ever pull a 1200px master.
+# Matches Google's trailing crop suffix (e.g. `=s96-c`) so we can upgrade it.
 _GOOGLE_SIZE_SUFFIX = re.compile(r"=s\d+-c$")
 
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -76,10 +74,9 @@ async def authenticate_or_create_google_user(
 ) -> User:
     """Find existing user by Google email or create a new one.
 
-    For new users, the Google profile picture is fetched into our own S3
-    bucket asynchronously (fire-and-forget) so registration latency is not
-    bound to Google's CDN. Existing users are returned unchanged; the
-    offline backfill script handles legacy CDN URLs.
+    For new users the Google profile picture is downloaded into our S3
+    bucket in the background — registration latency is not bound to
+    Google's CDN. Existing users are returned unchanged.
     """
     email = google_user_info.get("email")
     if not email:
@@ -119,8 +116,7 @@ async def authenticate_or_create_google_user(
     await db.refresh(user)
 
     if picture_url:
-        # Fire-and-forget: the avatar download + S3 upload runs after the
-        # response is sent so the user gets their JWT immediately.
+        # Fire-and-forget so JWT is returned without waiting for Google CDN.
         asyncio.create_task(
             set_avatar_from_remote_url_background(user.id, upgrade_google_picture_size(picture_url))
         )
