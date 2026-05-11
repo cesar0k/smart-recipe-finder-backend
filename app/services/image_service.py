@@ -9,11 +9,6 @@ from app.core.config import settings
 
 pillow_heif.register_heif_opener()
 
-FULL_MAX_WIDTH = 1200
-FULL_QUALITY = 85
-THUMB_MAX_WIDTH = 400
-THUMB_QUALITY = 60
-
 
 def validate_image_bytes(content: bytes) -> bytes:
     """Validate raw image bytes against project size / MIME / dimension limits.
@@ -109,10 +104,10 @@ def _resize_to_webp(content: bytes, max_width: int, quality: int) -> BytesIO:
 def generate_compressed_versions(content: bytes) -> dict[str, BytesIO]:
     """
     Generate two compressed WebP versions from the original image bytes:
-    - full: 1200px wide, quality 85
-    - thumb: 400px wide, quality 60
+    - full: IMAGE_FULL_MAX_WIDTH wide, IMAGE_FULL_QUALITY
+    - thumb: IMAGE_THUMB_MAX_WIDTH wide, IMAGE_THUMB_QUALITY
     """
     return {
-        "full": _resize_to_webp(content, FULL_MAX_WIDTH, FULL_QUALITY),
-        "thumb": _resize_to_webp(content, THUMB_MAX_WIDTH, THUMB_QUALITY),
+        "full": _resize_to_webp(content, settings.IMAGE_FULL_MAX_WIDTH, settings.IMAGE_FULL_QUALITY),
+        "thumb": _resize_to_webp(content, settings.IMAGE_THUMB_MAX_WIDTH, settings.IMAGE_THUMB_QUALITY),
     }
