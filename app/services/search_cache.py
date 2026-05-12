@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import random
+from typing import Any
 
 from app.core.cache import Cache
 
@@ -12,6 +13,11 @@ logger = logging.getLogger(__name__)
 SEARCH_VERSION_KEY = "search:version"
 SEARCH_TTL_SECONDS = 900
 SEARCH_TTL_JITTER = 120
+
+# Query intent is expensive (~1–3s via fal.ai) and deterministic for a given
+# query text — it doesn't depend on which recipes exist, so no version-scoping.
+INTENT_TTL_SECONDS = 900
+_INTENT_PREFIX = "intent:"
 
 
 def _normalize_query(query: str) -> str:
@@ -51,6 +57,33 @@ async def get_cached_search_pairs(cache: Cache, query: str) -> list[tuple[int, f
 async def cache_search_pairs(cache: Cache, query: str, pairs: list[tuple[int, float]]) -> None:
     key = await _build_key(cache, query)
     await cache.set_raw(key, json.dumps(pairs), ttl=_ttl_with_jitter())
+
+
+async def get_cached_intent(cache: Cache, query: str) -> dict[str, Any] | None:
+    """Return cached intent dict, or None on cache miss.
+
+    Caches both real constraints ({"vegetarian": true}) and empty result ({})
+    so simple queries like "борщ" don't re-hit the LLM either.
+    Returns None only when the key has never been set.
+    """
+    raw = await cache.get_raw(f"{_INTENT_PREFIX}{_hash_query(query)}")
+    if raw is None:
+        return None
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError("cached intent payload is not a dict")
+        return data  # type: ignore[return-value]
+    except (ValueError, TypeError):
+        logger.warning("Invalid cached intent payload for query=%r; dropping", query)
+        await cache.delete(f"{_INTENT_PREFIX}{_hash_query(query)}")
+        return None
+
+
+async def cache_intent(cache: Cache, query: str, intent: dict[str, Any]) -> None:
+    await cache.set_raw(
+        f"{_INTENT_PREFIX}{_hash_query(query)}", json.dumps(intent), ttl=INTENT_TTL_SECONDS
+    )
 
 
 async def bump_search_version(cache: Cache) -> int:

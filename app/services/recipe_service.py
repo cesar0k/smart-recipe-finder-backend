@@ -1137,10 +1137,22 @@ async def search_recipes_by_vector(
         cuisine=cuisine,
     )
 
-    # LLM: parse query intent for tag-based routing
+    # LLM: parse query intent for tag-based routing (result is cached per query text)
     from app.services import tag_service
 
-    tag_filter = await tag_service.parse_query_intent(query_str)
+    tag_filter: dict[str, Any] | None = None
+    intent_cache_hit = False
+    if cache is not None:
+        tag_filter = await search_cache.get_cached_intent(cache, query_str)
+        intent_cache_hit = tag_filter is not None
+
+    if not intent_cache_hit:
+        tag_filter = await tag_service.parse_query_intent(query_str)
+        if cache is not None:
+            # Cache the result regardless — {} means "no constraints", None means
+            # "LLM unavailable". Store None as {} so repeated requests for the
+            # same query don't keep hitting fal.ai when it's slow/down.
+            await search_cache.cache_intent(cache, query_str, tag_filter or {})
 
     # Hybrid routing:
     # - Positive-only intent (vegan=True, meal_type=dessert): SQL-first, re-rank by vector
