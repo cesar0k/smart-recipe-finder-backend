@@ -1104,19 +1104,72 @@ async def search_recipes_by_vector(
     sort: str = "newest",
     cache: Cache | None = None,
 ) -> list[Recipe]:
-    search_pairs: list[tuple[int, float]] | None = None
-    if cache is not None:
-        search_pairs = await search_cache.get_cached_search_pairs(cache, query_str)
+    from app.services import tag_service
 
-    if search_pairs is None:
-        search_pairs = await vector_store.search(query=query_str, n_results=50)
-        if cache is not None:
-            await search_cache.cache_search_pairs(cache, query_str, search_pairs)
+    # Read all three caches in parallel to minimise Redis round-trips.
+    cached_pairs: list[tuple[int, float]] | None = None
+    cached_rewrite: str | None = None  # None=miss, ""=no rewrite, text=rewritten
+    cached_intent: dict[str, Any] | None = None  # None=miss
+
+    if cache is not None:
+        cached_pairs, cached_rewrite, cached_intent = await asyncio.gather(
+            search_cache.get_cached_search_pairs(cache, query_str),
+            search_cache.get_cached_rewrite(cache, query_str),
+            search_cache.get_cached_intent(cache, query_str),
+        )
+
+    need_rewrite = cached_rewrite is None
+    need_intent = cached_intent is None
+    need_pairs = cached_pairs is None
+
+    # Fetch whatever is missing. rewrite, intent, and vector(original) are
+    # mutually independent so they run concurrently via gather.
+    llm_tasks: list[Any] = []
+    if need_rewrite:
+        llm_tasks.append(tag_service.rewrite_query(query_str))
+    if need_intent:
+        llm_tasks.append(tag_service.parse_query_intent(query_str))
+    if need_pairs:
+        llm_tasks.append(vector_store.search(query=query_str, n_results=50))
+
+    if llm_tasks:
+        gathered = await asyncio.gather(*llm_tasks)
+        idx = 0
+        if need_rewrite:
+            cached_rewrite = gathered[idx]
+            idx += 1
+        if need_intent:
+            cached_intent = gathered[idx]
+            idx += 1
+        if need_pairs:
+            cached_pairs = gathered[idx]
+
+    if cache is not None:
+        if need_rewrite:
+            await search_cache.cache_rewrite(cache, query_str, cached_rewrite)
+        if need_intent:
+            await search_cache.cache_intent(cache, query_str, cached_intent or {})
+        if need_pairs and cached_pairs:
+            await search_cache.cache_search_pairs(cache, query_str, cached_pairs)
+
+    rewritten: str | None = cached_rewrite or None  # "" sentinel → None
+    tag_filter: dict[str, Any] | None = cached_intent
+    search_pairs: list[tuple[int, float]] = cached_pairs or []
+
+    # If the query was rewritten, run a second vector search and min-merge the
+    # two result sets — keeps original ranking intact while expanding recall.
+    if rewritten and rewritten.lower() != query_str.lower():
+        pairs_rewrite = await vector_store.search(query=rewritten, n_results=50)
+        if pairs_rewrite:
+            merged: dict[int, float] = {rid: dist for rid, dist in search_pairs}
+            for rid, dist in pairs_rewrite:
+                if rid not in merged or dist < merged[rid]:
+                    merged[rid] = dist
+            search_pairs = sorted(merged.items(), key=lambda x: x[1])
 
     if not search_pairs:
         return []
 
-    # Only return approved recipes in search results
     candidate_ids = [rid for rid, _ in search_pairs]
     query = _with_owner(
         select(Recipe)
@@ -1124,9 +1177,8 @@ async def search_recipes_by_vector(
             Recipe.id.in_(candidate_ids),
             Recipe.status == "approved",
         )
-        .options(selectinload(Recipe.tags))  # load tags for post-filter
+        .options(selectinload(Recipe.tags))
     )
-
     query = _apply_filters(
         query,
         include_str,
@@ -1137,27 +1189,9 @@ async def search_recipes_by_vector(
         cuisine=cuisine,
     )
 
-    # LLM: parse query intent for tag-based routing (result is cached per query text)
-    from app.services import tag_service
-
-    tag_filter: dict[str, Any] | None = None
-    intent_cache_hit = False
-    if cache is not None:
-        tag_filter = await search_cache.get_cached_intent(cache, query_str)
-        intent_cache_hit = tag_filter is not None
-
-    if not intent_cache_hit:
-        tag_filter = await tag_service.parse_query_intent(query_str)
-        if cache is not None:
-            # Cache the result regardless — {} means "no constraints", None means
-            # "LLM unavailable". Store None as {} so repeated requests for the
-            # same query don't keep hitting fal.ai when it's slow/down.
-            await search_cache.cache_intent(cache, query_str, tag_filter or {})
-
-    # Hybrid routing:
-    # - Positive-only intent (vegan=True, meal_type=dessert): SQL-first, re-rank by vector
-    # - Negation/exclusion intent (без мяса → vegetarian=True + main_protein=none): vector-first
-    # - No intent: pure vector search
+    # Positive-only intent → SQL-first search re-ranked by vector.
+    # Negation/exclusion intent → vector-first with post-filter.
+    # No intent → pure vector.
     if tag_filter and _is_positive_only_intent(tag_filter):
         return await _sql_tag_search(
             db,
@@ -1176,10 +1210,9 @@ async def search_recipes_by_vector(
     result = await db.execute(query)
     recipes_map = {r.id: r for r in result.scalars().unique().all()}
 
-    # Keep distance ordering over all SQL-filtered candidates
     ordered_pairs = [(rid, dist) for rid, dist in search_pairs if rid in recipes_map]
 
-    # Negation post-filter: applied BEFORE adaptive limit so pool isn't truncated first
+    # Negation post-filter before adaptive limit
     if tag_filter:
         filtered_recipes = _apply_tag_filter(
             [recipes_map[rid] for rid, _ in ordered_pairs if rid in recipes_map],
@@ -1188,7 +1221,6 @@ async def search_recipes_by_vector(
         filtered_ids = {r.id for r in filtered_recipes}
         ordered_pairs = [(rid, dist) for rid, dist in ordered_pairs if rid in filtered_ids]
 
-    # Adaptive limit on the (possibly tag-filtered) candidate set
     adaptive = _apply_adaptive_limit(
         ordered_pairs,
         abs_max=settings.SEARCH_ABSOLUTE_MAX_DIST,
@@ -1197,8 +1229,6 @@ async def search_recipes_by_vector(
     )
     final = [recipes_map[rid] for rid, _ in adaptive]
 
-    # sort=popular re-orders the relevance-trimmed result set by
-    # favorites_count (id DESC tiebreaker); sort=newest keeps vector order.
     if sort == "popular":
         final.sort(key=lambda r: (-(r.favorites_count or 0), -r.id))
     return final
