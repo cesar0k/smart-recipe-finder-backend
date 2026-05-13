@@ -109,7 +109,7 @@ def _strip_fences(text: str) -> str:
 
 
 async def _fal_call(prompt: str, system_prompt: str) -> dict[str, Any]:
-    """Single async fal.ai call. Raises on error."""
+    """Single async fal.ai call returning a JSON object. Raises on error."""
     import fal_client
 
     result = await fal_client.run_async(
@@ -123,6 +123,21 @@ async def _fal_call(prompt: str, system_prompt: str) -> dict[str, Any]:
     )
     raw = _strip_fences(result["output"])
     return json.loads(raw)  # type: ignore[no-any-return]
+
+
+async def _fal_call_text(prompt: str, system_prompt: str) -> str:
+    """Single async fal.ai call returning plain text. Raises on error."""
+    import fal_client
+
+    result = await fal_client.run_async(
+        _FAL_APP,
+        arguments={
+            "model": _get_llm_model(),
+            "system_prompt": system_prompt,
+            "prompt": prompt,
+        },
+    )
+    return str(result["output"]).strip()
 
 
 # ── Recipe tag classification ─────────────────────────────────────────────────
@@ -281,4 +296,58 @@ async def parse_query_intent(query: str) -> dict[str, Any] | None:
         return None
     except Exception as exc:
         log.debug("tag_service: parse_query_intent failed for %r: %s", query, exc)
+        return None
+
+
+# ── Query rewriting ───────────────────────────────────────────────────────────
+
+_REWRITE_SYSTEM_PROMPT = """\
+You are a culinary search assistant. Your job is to rewrite a user's search query \
+into a clear, concrete culinary description that will work well for semantic similarity \
+search over a recipe database.
+
+Rules:
+- Translate abstract, metaphorical, scientific, or colloquial terms into plain cooking language.
+- Expand ingredient synonyms: "казеин" → "творог", "allium" → "лук чеснок", \
+"brassica" → "капуста брокколи".
+- Describe processes concretely: "карамелизованный" → "обжаренный до золотистой корочки с сахаром".
+- If the query already uses plain cooking language, return it unchanged.
+- Return ONLY the rewritten query as plain text, no explanation, no quotes.
+- Keep the same language as the input (Russian stays Russian, English stays English).
+- Maximum 2 sentences.
+
+Examples:
+  "казеиновый белок" → "рецепты из творога, сыра или молочных продуктов"
+  "блюда для восстановления после тренировки" → "высокобелковое блюдо из курицы яиц или бобовых"
+  "прокисшее тесто" → "рецепты на кислом или дрожжевом тесте"
+  "борщ" → "борщ"
+  "pasta carbonara" → "pasta carbonara"\
+"""
+
+
+async def rewrite_query(query: str) -> str | None:
+    """Rewrite an abstract/tricky query into plain culinary language for better vector search.
+
+    Returns the rewritten query string, or None when the LLM is unavailable/timeout.
+    If the query is already plain, the LLM returns it unchanged.
+    Hard 3-second timeout — callers fall back to the original query on None.
+    """
+    if not _get_fal_key():
+        return None
+
+    try:
+        result = await asyncio.wait_for(
+            _fal_call_text(f'Query: "{query}"', _REWRITE_SYSTEM_PROMPT),
+            timeout=3.0,
+        )
+        rewritten = result.strip().strip('"').strip("'")
+        if not rewritten or rewritten == query:
+            return None  # unchanged — no point substituting
+        log.debug("tag_service: rewrite %r → %r", query, rewritten)
+        return rewritten
+    except asyncio.TimeoutError:
+        log.debug("tag_service: rewrite_query timed out for %r", query)
+        return None
+    except Exception as exc:
+        log.debug("tag_service: rewrite_query failed for %r: %s", query, exc)
         return None

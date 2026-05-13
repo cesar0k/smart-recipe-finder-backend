@@ -19,6 +19,9 @@ SEARCH_TTL_JITTER = 120
 INTENT_TTL_SECONDS = 900
 _INTENT_PREFIX = "intent:"
 
+REWRITE_TTL_SECONDS = 900
+_REWRITE_PREFIX = "rewrite:"
+
 
 def _normalize_query(query: str) -> str:
     return " ".join(query.lower().strip().split())
@@ -83,6 +86,27 @@ async def get_cached_intent(cache: Cache, query: str) -> dict[str, Any] | None:
 async def cache_intent(cache: Cache, query: str, intent: dict[str, Any]) -> None:
     await cache.set_raw(
         f"{_INTENT_PREFIX}{_hash_query(query)}", json.dumps(intent), ttl=INTENT_TTL_SECONDS
+    )
+
+
+async def get_cached_rewrite(cache: Cache, query: str) -> str | None:
+    """Return cached rewritten query, or None on miss.
+
+    Empty string sentinel means LLM returned no rewrite (original was fine),
+    so we don't re-call the LLM for the same query.
+    """
+    raw = await cache.get_raw(f"{_REWRITE_PREFIX}{_hash_query(query)}")
+    if raw is None:
+        return None
+    return raw  # empty string = "no rewrite", non-empty = rewritten text
+
+
+async def cache_rewrite(cache: Cache, query: str, rewritten: str | None) -> None:
+    """Cache rewrite result. Pass None to store the 'no rewrite' sentinel."""
+    await cache.set_raw(
+        f"{_REWRITE_PREFIX}{_hash_query(query)}",
+        rewritten or "",  # empty string = no rewrite
+        ttl=REWRITE_TTL_SECONDS,
     )
 
 
