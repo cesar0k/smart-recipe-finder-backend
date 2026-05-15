@@ -25,3 +25,7 @@ class ValidationError(DomainError):
 
 class InvalidCredentialsError(DomainError):
     """Login or refresh-token validation failure (HTTP 401)."""
+
+
+class RecaptchaError(DomainError):
+    """reCAPTCHA verification failed or score too low (HTTP 400)."""
