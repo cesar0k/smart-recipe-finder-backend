@@ -8,7 +8,7 @@ from app.api.deps import require_moderator
 from app.core.cache import Cache, get_cache
 from app.db.session import get_db
 from app.models.user import User
-from app.services import moderation_log_service, moderation_service
+from app.services import comment_service, moderation_log_service, moderation_service
 
 router = APIRouter()
 
@@ -148,3 +148,35 @@ async def moderate_draft(
         rejection_reason=body.rejection_reason,
     )
     return schemas.RecipeDraftResponse.model_validate(updated)
+
+
+@router.get(
+    "/comments",
+    response_model=list[schemas.ReportedCommentResponse],
+    operation_id="list_reported_comments",
+)
+async def list_reported_comments(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _mod: Annotated[User, Depends(require_moderator)],
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+) -> list[schemas.ReportedCommentResponse]:
+    """List comments with active reports for moderation."""
+    items = await comment_service.get_reported_comments(db, skip=skip, limit=limit)
+    return [schemas.ReportedCommentResponse(**item) for item in items]
+
+
+@router.post(
+    "/comments/{comment_id}/dismiss",
+    status_code=204,
+    operation_id="dismiss_comment_reports",
+)
+async def dismiss_comment_reports(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _mod: Annotated[User, Depends(require_moderator)],
+    comment_id: int,
+) -> None:
+    """Dismiss all reports for a comment (keep comment, clear reports)."""
+    await comment_service.dismiss_comment_reports(db, comment_id=comment_id)

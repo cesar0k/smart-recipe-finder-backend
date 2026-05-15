@@ -23,6 +23,9 @@ class Notification(Base):
     recipe_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("recipes.id", ondelete="SET NULL"), nullable=True
     )
+    comment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("recipe_comments.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now()
     )

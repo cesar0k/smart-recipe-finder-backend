@@ -1,6 +1,21 @@
-from .auth import GoogleAuthCode, RefreshRequest, TokenPair
+from .auth import (
+    ForgotPasswordRequest,
+    GoogleAuthCode,
+    RefreshRequest,
+    ResetPasswordRequest,
+    TokenPair,
+    VerifyEmailRequest,
+)
+from .comment import (
+    CommentCreate,
+    CommentReportCreate,
+    CommentReportItem,
+    CommentResponse,
+    ReportedCommentResponse,
+)
 from .moderation import ModerationAction, ModerationLogResponse, PendingCountResponse
 from .notification import NotificationResponse, UnreadCountResponse
+from .rating import RatingCreate, RatingResponse
 from .recipe import (
     Ingredient,
     Recipe,
@@ -12,6 +27,9 @@ from .recipe import (
     RecipeUpdate,
 )
 from .user import (
+    EMAIL_NOTIFICATION_TYPES,
+    EmailPrefResponse,
+    EmailPrefUpdate,
     PasswordChange,
     PublicUserResponse,
     UserCreate,
@@ -22,6 +40,14 @@ from .user import (
 )
 
 __all__ = [
+    "CommentCreate",
+    "CommentReportCreate",
+    "CommentResponse",
+    "CommentReportItem",
+    "EMAIL_NOTIFICATION_TYPES",
+    "EmailPrefResponse",
+    "EmailPrefUpdate",
+    "ForgotPasswordRequest",
     "GoogleAuthCode",
     "Ingredient",
     "ModerationAction",
@@ -30,6 +56,8 @@ __all__ = [
     "PasswordChange",
     "PendingCountResponse",
     "PublicUserResponse",
+    "RatingCreate",
+    "RatingResponse",
     "Recipe",
     "RecipeBase",
     "RecipeCreate",
@@ -38,6 +66,8 @@ __all__ = [
     "RecipeTagsPublic",
     "RecipeUpdate",
     "RefreshRequest",
+    "ReportedCommentResponse",
+    "ResetPasswordRequest",
     "TokenPair",
     "UnreadCountResponse",
     "UserCreate",
@@ -45,4 +75,5 @@ __all__ = [
     "UserResponse",
     "UserSelfUpdate",
     "UserUpdate",
+    "VerifyEmailRequest",
 ]

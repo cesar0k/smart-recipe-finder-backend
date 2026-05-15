@@ -23,9 +23,14 @@ class Recipe(RecipeBase):
     has_pending_draft: bool = False
     tags: RecipeTagsPublic | None = None
     favorites_count: int = 0
-    # Caller-aware: attached by the service layer after cache read; the
-    # cached payload itself stays user-agnostic.
+    average_rating: float = 0.0
+    ratings_count: int = 0
+    comments_count: int = 0
+    engagement_score: float = 0.0
+    # Caller-aware fields: attached by the service layer after cache read;
+    # the cached payload itself stays user-agnostic.
     is_favorited: bool = False
+    user_rating: int | None = None
 
     @field_validator("image_urls", mode="before")
     @classmethod

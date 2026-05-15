@@ -75,10 +75,14 @@ async def read_recipes(
     difficulty: str | None = Query(None, description="Comma-separated: easy,medium,hard"),
     cuisine: str | None = Query(None, description="Comma-separated cuisine values"),
     meal_type: str | None = Query(None, description="Filter by meal_type tag (e.g. soup, dessert)"),
+    has_comments: bool = Query(False, description="Only return recipes with at least one comment"),
     sort: str = Query(
         "newest",
-        pattern="^(newest|popular)$",
-        description="Sort order: newest (default) or popular (by favorites_count)",
+        pattern="^(newest|popular|top_rated|most_favorited)$",
+        description=(
+            "Sort order: newest (default, id DESC), popular (engagement score), "
+            "top_rated (average_rating DESC), most_favorited (favorites_count DESC)"
+        ),
     ),
 ) -> list[schemas.Recipe]:
     recipes = await recipe_service.get_all_recipes(
@@ -92,6 +96,7 @@ async def read_recipes(
         difficulty=difficulty,
         cuisine=cuisine,
         meal_type=meal_type,
+        has_comments=has_comments,
         sort=sort,
     )
     return await recipe_service.enrich_recipes_for_caller(db, recipes=recipes, viewer=current_user)
@@ -158,10 +163,13 @@ async def search_recipes(
     cuisine: str | None = Query(None, description="Comma-separated cuisine values"),
     sort: str = Query(
         "newest",
-        pattern="^(newest|popular)$",
-        description="Sort order applied AFTER relevance filtering: "
-        "'newest' (default) keeps vector-distance order, 'popular' re-orders "
-        "the result set by favorites_count.",
+        pattern="^(newest|popular|top_rated|most_favorited)$",
+        description=(
+            "Sort order applied AFTER relevance filtering: "
+            "'newest' (default) keeps vector-distance order, "
+            "'popular' re-orders by engagement score, "
+            "'top_rated' by average_rating, 'most_favorited' by favorites_count."
+        ),
     ),
 ) -> list[schemas.Recipe]:
     if not is_embedding_model_ready():
