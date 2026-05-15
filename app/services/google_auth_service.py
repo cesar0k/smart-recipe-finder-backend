@@ -110,6 +110,7 @@ async def authenticate_or_create_google_user(
         hashed_password=None,
         auth_provider="google",
         role="user",
+        email_verified=True,  # Google email is pre-verified
     )
     db.add(user)
     await db.commit()

@@ -80,6 +80,23 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     REDIS_DEFAULT_TTL: int = 3600  # 1 hour
 
+    # ── SMTP / Email ──────────────────────────────────────────────────────────
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_LOGIN: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@smartrecipefinder.com"
+    SMTP_FROM_NAME: str = "Smart Recipe Finder"
+    # Set to False to disable all outbound email (useful in dev/tests)
+    EMAILS_ENABLED: bool = True
+
+    # Token TTLs for email-based flows
+    EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS: int = 24
+    PASSWORD_RESET_TOKEN_EXPIRE_HOURS: int = 1
+
+    # Base URL of the frontend — used to build links inside emails
+    FRONTEND_URL: str = "http://localhost:5173"
+
     @model_validator(mode="after")
     def check_required_fields(self) -> Self:
         missing_fields = []

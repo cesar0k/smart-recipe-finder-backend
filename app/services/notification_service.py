@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import Sequence
 from typing import cast
@@ -10,6 +11,7 @@ from sqlalchemy.future import select
 
 from app.core.exceptions import NotFoundError
 from app.models.notification import Notification
+from app.models.user import User
 from app.schemas.notification import NotificationResponse
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,35 @@ async def _ws_notify_users(user_ids: list[int], notifications: list[Notification
         logger.debug("WS bulk notify failed")
 
 
+async def _schedule_notification_email(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    notification_type: str,
+    message: str,
+    recipe_id: int | None = None,
+) -> None:
+    """Load user and fire-and-forget a notification email. Best-effort."""
+    try:
+        from app.services.email_service import send_notification_email  # avoid circular import
+
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            return
+        asyncio.create_task(
+            send_notification_email(
+                db,
+                user=user,
+                notification_type=notification_type,
+                message=message,
+                recipe_id=recipe_id,
+            )
+        )
+    except Exception:
+        logger.debug("Failed to schedule notification email for user_id=%d", user_id)
+
+
 async def notify_and_broadcast(
     db: AsyncSession,
     *,
@@ -58,18 +89,27 @@ async def notify_and_broadcast(
     title: str,
     message: str,
     recipe_id: int | None = None,
+    comment_id: int | None = None,
 ) -> Notification:
-    """Create notification, flush to DB, and send via WebSocket."""
+    """Create notification, flush to DB, send via WebSocket, and schedule email."""
     notif = Notification(
         user_id=user_id,
         type=type,
         title=title,
         message=message,
         recipe_id=recipe_id,
+        comment_id=comment_id,
     )
     db.add(notif)
     await db.flush()
     await _ws_notify_user(user_id, notif)
+    await _schedule_notification_email(
+        db,
+        user_id=user_id,
+        notification_type=type,
+        message=message,
+        recipe_id=recipe_id,
+    )
     return notif
 
 
@@ -81,8 +121,9 @@ async def notify_bulk_and_broadcast(
     title: str,
     message: str,
     recipe_id: int | None = None,
+    comment_id: int | None = None,
 ) -> list[Notification]:
-    """Create notifications for multiple users, flush, and send via WebSocket."""
+    """Create notifications for multiple users, flush, send via WebSocket, and schedule emails."""
     notifications = []
     for uid in user_ids:
         n = Notification(
@@ -91,11 +132,20 @@ async def notify_bulk_and_broadcast(
             title=title,
             message=message,
             recipe_id=recipe_id,
+            comment_id=comment_id,
         )
         db.add(n)
         notifications.append(n)
     await db.flush()
     await _ws_notify_users(user_ids, notifications)
+    for uid in user_ids:
+        await _schedule_notification_email(
+            db,
+            user_id=uid,
+            notification_type=type,
+            message=message,
+            recipe_id=recipe_id,
+        )
     return notifications
 
 

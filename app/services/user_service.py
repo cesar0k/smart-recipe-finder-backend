@@ -187,7 +187,7 @@ async def get_public_profile(
     *,
     user_id: int,
 ) -> dict[str, Any] | None:
-    """Get public profile: user info + approved recipe count."""
+    """Get public profile: user info + approved recipe count + followers_count."""
     stmt = (
         select(
             User.id,
@@ -196,6 +196,7 @@ async def get_public_profile(
             User.avatar_url,
             User.role,
             User.created_at,
+            User.followers_count,
             sa_func.count(Recipe.id).label("recipe_count"),
         )
         .outerjoin(Recipe, (Recipe.owner_id == User.id) & (Recipe.status == "approved"))
@@ -214,6 +215,7 @@ async def get_public_profile(
         "role": row.role,
         "created_at": row.created_at,
         "recipe_count": row.recipe_count,
+        "followers_count": row.followers_count,
     }
 
 
@@ -222,15 +224,25 @@ async def get_public_profile_cached(
     *,
     user_id: int,
     cache: Cache | None = None,
+    viewer_user_id: int | None = None,
 ) -> schemas.PublicUserResponse:
     """Read-through cache wrapper around get_public_profile.
 
+    ``is_following`` is computed fresh (per-viewer) and never stored in cache.
     Raises NotFoundError when the user does not exist.
     """
     key = cache_keys.user_profile(user_id)
     if cache is not None:
         cached = await cache.get_model(key, schemas.PublicUserResponse)
         if cached is not None:
+            # Attach per-viewer is_following after cache hit
+            if viewer_user_id and viewer_user_id != user_id:
+                from app.services.follow_service import is_following as _is_following
+
+                following = await _is_following(
+                    db, follower_id=viewer_user_id, followed_id=user_id
+                )
+                return cached.model_copy(update={"is_following": following})
             return cached
 
     profile = await get_public_profile(db, user_id=user_id)
@@ -240,6 +252,16 @@ async def get_public_profile_cached(
     response = schemas.PublicUserResponse(**profile)
     if cache is not None:
         await cache.set_model(key, response, ttl=cache_keys.TTL_USER_PROFILE)
+
+    # Attach per-viewer is_following (not cached)
+    if viewer_user_id and viewer_user_id != user_id:
+        from app.services.follow_service import is_following as _is_following
+
+        following = await _is_following(
+            db, follower_id=viewer_user_id, followed_id=user_id
+        )
+        return response.model_copy(update={"is_following": following})
+
     return response
 
 

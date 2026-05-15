@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
@@ -5,9 +7,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
+from app.api.deps import get_current_user
 from app.core.exceptions import InvalidCredentialsError
 from app.db.session import get_db
-from app.services import auth_service
+from app.models.user import User
+from app.services import auth_service, email_service
 from app.services.auth_service import DeactivatedUserError
 from app.services.google_auth_service import (
     GoogleAuthError,
@@ -15,6 +19,7 @@ from app.services.google_auth_service import (
     exchange_code_for_user_info,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -35,7 +40,14 @@ async def register(
         username=user_in.username,
         display_name=user_in.display_name,
         password=user_in.password,
+        language=user_in.language,
     )
+    # Fire-and-forget verification email — does not block registration
+    try:
+        raw_token = await auth_service.request_email_verification(db, user=user)
+        asyncio.create_task(email_service.send_verification_email(user, raw_token))
+    except Exception:
+        logger.debug("Could not schedule verification email after registration")
     return schemas.UserResponse.model_validate(user)
 
 
@@ -109,3 +121,80 @@ async def google_auth(
 
     access_token, refresh_token = await auth_service.create_token_pair(db, user=user)
     return schemas.TokenPair(access_token=access_token, refresh_token=refresh_token)
+
+
+# Email verification endpoints
+@router.post(
+    "/send-verification-email",
+    status_code=status.HTTP_200_OK,
+    operation_id="send_verification_email",
+)
+async def send_verification_email(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict[str, str]:
+    """Send (or re-send) an email verification link to the current user."""
+    raw_token = await auth_service.request_email_verification(db, user=current_user)
+    asyncio.create_task(email_service.send_verification_email(current_user, raw_token))
+    return {"message": "Verification email sent"}
+
+
+@router.post(
+    "/verify-email",
+    response_model=schemas.UserResponse,
+    operation_id="verify_email",
+)
+async def verify_email(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    body: schemas.VerifyEmailRequest,
+) -> schemas.UserResponse:
+    """Confirm email ownership using the token from the verification link."""
+    user = await auth_service.verify_email_token(db, token=body.token)
+    return schemas.UserResponse.model_validate(user)
+
+
+# Password reset endpoints
+@router.post(
+    "/forgot-password",
+    status_code=status.HTTP_200_OK,
+    operation_id="forgot_password",
+)
+async def forgot_password(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    body: schemas.ForgotPasswordRequest,
+) -> dict[str, str]:
+    """Request a password reset email.
+
+    Always returns 200 to prevent email enumeration.
+    If the account was registered via Google, returns detail='google_auth_user'.
+    """
+    raw_token = await auth_service.request_password_reset(db, email=str(body.email))
+    if raw_token is not None:
+        # Load the user again to get the object for the email (request_password_reset
+        # doesn't return it to avoid extra query in the not-found branch)
+        from app.services.user_service import get_user_by_email  # local import
+
+        user = await get_user_by_email(db, email=str(body.email))
+        if user is not None:
+            asyncio.create_task(email_service.send_password_reset_email(user, raw_token))
+    return {"message": "If the account exists, a reset email has been sent"}
+
+
+@router.post(
+    "/reset-password",
+    response_model=schemas.UserResponse,
+    operation_id="reset_password",
+)
+async def reset_password(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    body: schemas.ResetPasswordRequest,
+) -> schemas.UserResponse:
+    """Apply a new password using the reset token from the email link."""
+    user = await auth_service.reset_password(
+        db, token=body.token, new_password=body.new_password
+    )
+    return schemas.UserResponse.model_validate(user)
