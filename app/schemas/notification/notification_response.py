@@ -13,6 +13,7 @@ class NotificationResponse(BaseModel):
     message: str
     is_read: bool
     recipe_id: int | None = None
+    comment_id: int | None = None
     created_at: datetime
 
     @field_serializer("created_at")

@@ -1,15 +1,22 @@
+import asyncio
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from app import schemas
-from app.api.deps import get_current_user, require_admin
+from app.api.deps import get_current_user, get_current_user_optional, require_admin
 from app.core.cache import Cache, get_cache
+from app.core.exceptions import ValidationError
 from app.db.session import get_db
+from app.models.email_notification_preference import EmailNotificationPreference
 from app.models.user import User
-from app.services import auth_service, user_service
+from app.services import auth_service, email_service, user_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -42,10 +49,16 @@ async def get_user_profile(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[Cache, Depends(get_cache)],
+    viewer: Annotated[User | None, Depends(get_current_user_optional)],
     user_id: int,
 ) -> schemas.PublicUserResponse:
-    """Get public user profile. Public endpoint."""
-    return await user_service.get_public_profile_cached(db, user_id=user_id, cache=cache)
+    """Get public user profile. Optional auth — adds is_following for viewer."""
+    return await user_service.get_public_profile_cached(
+        db,
+        user_id=user_id,
+        cache=cache,
+        viewer_user_id=viewer.id if viewer else None,
+    )
 
 
 # --- Current user endpoints (authenticated) ---
@@ -74,14 +87,22 @@ async def update_me(
     current_user: Annotated[User, Depends(get_current_user)],
     body: schemas.UserSelfUpdate,
 ) -> schemas.UserResponse:
-    updated = await auth_service.update_user_profile(
+    updated, pending_token = await auth_service.update_user_profile(
         db,
         cache=cache,
         user=current_user,
         username=body.username,
         display_name=body.display_name,
         email=body.email,
+        language=body.language,
     )
+    if pending_token is not None:
+        # Send confirmation to the new (pending) email address
+        pending_addr = updated.pending_email
+        if pending_addr:
+            asyncio.create_task(
+                email_service.send_email_change_confirmation(updated, pending_token, pending_addr)
+            )
     return schemas.UserResponse.model_validate(updated)
 
 
@@ -119,6 +140,63 @@ async def change_password(
         new_password=body.new_password,
     )
     return {"message": "Password changed successfully"}
+
+
+@router.get(
+    "/me/email-preferences",
+    response_model=list[schemas.EmailPrefResponse],
+    operation_id="get_email_preferences",
+)
+async def get_email_preferences(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[schemas.EmailPrefResponse]:
+    """Return all email notification preferences for the current user.
+
+    Types with no explicit row default to enabled=True.
+    Returns the full list of known types merged with any saved preferences.
+    """
+    result = await db.execute(
+        select(EmailNotificationPreference).where(
+            EmailNotificationPreference.user_id == current_user.id
+        )
+    )
+    saved = {p.type: p.enabled for p in result.scalars().all()}
+
+    prefs = [
+        schemas.EmailPrefResponse(type=t, enabled=saved.get(t, True))
+        for t in schemas.EMAIL_NOTIFICATION_TYPES
+    ]
+    return prefs
+
+
+@router.put(
+    "/me/email-preferences",
+    response_model=schemas.EmailPrefResponse,
+    operation_id="update_email_preference",
+)
+async def update_email_preference(
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    body: schemas.EmailPrefUpdate,
+) -> schemas.EmailPrefResponse:
+    """Create or update a single email notification preference."""
+    if body.type not in schemas.EMAIL_NOTIFICATION_TYPES:
+        raise ValidationError(f"Unknown notification type: {body.type}")
+
+    stmt = (
+        pg_insert(EmailNotificationPreference)
+        .values(user_id=current_user.id, type=body.type, enabled=body.enabled)
+        .on_conflict_do_update(
+            constraint="uq_email_prefs_user_type",
+            set_={"enabled": body.enabled},
+        )
+    )
+    await db.execute(stmt)
+    await db.commit()
+    return schemas.EmailPrefResponse(type=body.type, enabled=body.enabled)
 
 
 # --- Admin-only endpoints ---

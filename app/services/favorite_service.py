@@ -74,10 +74,16 @@ async def add_favorite(
     await db.execute(stmt)
 
     new_count = await _recompute_favorites_count(db, recipe_id=recipe_id)
+    from app.services.rating_service import recompute_engagement_score
+    await recompute_engagement_score(db, recipe_id=recipe_id)
     await db.commit()
 
-    recipe.favorites_count = new_count
     await _bump_caches(cache, recipe_id=recipe_id)
+    reloaded = await _load_recipe_with_relations(db, recipe_id=recipe_id)
+    if reloaded is not None:
+        reloaded.favorites_count = new_count
+        return reloaded
+    recipe.favorites_count = new_count
     return recipe
 
 
@@ -106,10 +112,16 @@ async def remove_favorite(
     )
 
     new_count = await _recompute_favorites_count(db, recipe_id=recipe_id)
+    from app.services.rating_service import recompute_engagement_score
+    await recompute_engagement_score(db, recipe_id=recipe_id)
     await db.commit()
 
-    recipe.favorites_count = new_count
     await _bump_caches(cache, recipe_id=recipe_id)
+    reloaded = await _load_recipe_with_relations(db, recipe_id=recipe_id)
+    if reloaded is not None:
+        reloaded.favorites_count = new_count
+        return reloaded
+    recipe.favorites_count = new_count
     return recipe
 
 

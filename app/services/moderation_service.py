@@ -45,16 +45,29 @@ async def get_pending_drafts(db: AsyncSession) -> Sequence[RecipeDraft]:
 
 
 async def get_pending_counts(db: AsyncSession) -> dict[str, int]:
-    """Return counts of pending recipes and drafts."""
+    """Return counts of pending recipes, drafts, and reported comments."""
+    from sqlalchemy import distinct
+
+    from app.models.recipe_comment import RecipeComment
+    from app.models.recipe_comment_report import RecipeCommentReport
+
     recipe_q = select(sa_func.count(Recipe.id)).where(Recipe.status == "pending")
     draft_q = select(sa_func.count(RecipeDraft.id)).where(RecipeDraft.status == "pending")
+    # Count distinct comments that have at least one report and aren't deleted
+    comment_report_q = select(
+        sa_func.count(distinct(RecipeCommentReport.comment_id))
+    ).join(RecipeComment, RecipeComment.id == RecipeCommentReport.comment_id).where(
+        RecipeComment.is_deleted.is_(False)
+    )
 
     recipe_result = await db.execute(recipe_q)
     draft_result = await db.execute(draft_q)
+    comment_report_result = await db.execute(comment_report_q)
 
     return {
         "recipes": recipe_result.scalar_one(),
         "drafts": draft_result.scalar_one(),
+        "comment_reports": comment_report_result.scalar_one(),
     }
 
 
@@ -198,6 +211,28 @@ async def moderate_recipe(
             recipe_id=recipe.id,
         )
 
+    # Notify followers when recipe is approved
+    if action == "approve" and recipe.owner_id is not None:
+        from app.services import follow_service
+        from app.models.user import User as _User2
+
+        follower_ids = await follow_service.get_follower_ids(db, user_id=recipe.owner_id)
+        follower_ids.discard(recipe.owner_id)
+        if follower_ids:
+            owner_row = await db.execute(
+                select(_User2.username, _User2.display_name).where(_User2.id == recipe.owner_id)
+            )
+            owner = owner_row.one_or_none()
+            author_name = (owner.display_name or owner.username) if owner else ""
+            await notification_service.notify_bulk_and_broadcast(
+                db,
+                user_ids=list(follower_ids),
+                type="followed_user_published",
+                title=recipe.title,
+                message=author_name,
+                recipe_id=recipe.id,
+            )
+
     await db.commit()
     await db.refresh(recipe)
 
@@ -291,6 +326,28 @@ async def moderate_draft(
         message=rejection_reason or "",
         recipe_id=draft.recipe_id,
     )
+
+    # Notify followers when draft is approved (recipe goes live)
+    if action == "approve" and draft.recipe_id is not None:
+        from app.services import follow_service
+        from app.models.user import User as _User3
+
+        follower_ids = await follow_service.get_follower_ids(db, user_id=draft.author_id)
+        follower_ids.discard(draft.author_id)
+        if follower_ids:
+            owner_row = await db.execute(
+                select(_User3.username, _User3.display_name).where(_User3.id == draft.author_id)
+            )
+            owner = owner_row.one_or_none()
+            author_name = (owner.display_name or owner.username) if owner else ""
+            await notification_service.notify_bulk_and_broadcast(
+                db,
+                user_ids=list(follower_ids),
+                type="followed_user_published",
+                title=draft.title,
+                message=author_name,
+                recipe_id=draft.recipe_id,
+            )
 
     await db.commit()
     await db.refresh(draft)

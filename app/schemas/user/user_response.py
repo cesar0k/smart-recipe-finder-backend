@@ -15,3 +15,6 @@ class UserResponse(BaseModel):
     auth_provider: str
     is_active: bool
     created_at: datetime
+    email_verified: bool = False
+    pending_email: str | None = None
+    language: str = "ru"

@@ -108,6 +108,10 @@ def generate_compressed_versions(content: bytes) -> dict[str, BytesIO]:
     - thumb: IMAGE_THUMB_MAX_WIDTH wide, IMAGE_THUMB_QUALITY
     """
     return {
-        "full": _resize_to_webp(content, settings.IMAGE_FULL_MAX_WIDTH, settings.IMAGE_FULL_QUALITY),
-        "thumb": _resize_to_webp(content, settings.IMAGE_THUMB_MAX_WIDTH, settings.IMAGE_THUMB_QUALITY),
+        "full": _resize_to_webp(
+            content, settings.IMAGE_FULL_MAX_WIDTH, settings.IMAGE_FULL_QUALITY
+        ),
+        "thumb": _resize_to_webp(
+            content, settings.IMAGE_THUMB_MAX_WIDTH, settings.IMAGE_THUMB_QUALITY
+        ),
     }

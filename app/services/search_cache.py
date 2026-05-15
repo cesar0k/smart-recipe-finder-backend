@@ -76,7 +76,7 @@ async def get_cached_intent(cache: Cache, query: str) -> dict[str, Any] | None:
         data = json.loads(raw)
         if not isinstance(data, dict):
             raise ValueError("cached intent payload is not a dict")
-        return data  # type: ignore[return-value]
+        return data
     except (ValueError, TypeError):
         logger.warning("Invalid cached intent payload for query=%r; dropping", query)
         await cache.delete(f"{_INTENT_PREFIX}{_hash_query(query)}")

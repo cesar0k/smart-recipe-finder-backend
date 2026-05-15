@@ -226,6 +226,10 @@ async def _sql_tag_search(
     final = [recipes_map[rid] for rid, _ in top if rid in recipes_map]
 
     if sort == "popular":
+        final.sort(key=lambda r: (-(r.engagement_score or 0), -r.id))
+    elif sort == "top_rated":
+        final.sort(key=lambda r: (-(r.average_rating or 0), -(r.ratings_count or 0), -r.id))
+    elif sort == "most_favorited":
         final.sort(key=lambda r: (-(r.favorites_count or 0), -r.id))
     return final
 
@@ -520,10 +524,10 @@ async def create_recipe(
             metadata=meta,
         )
 
+    from app.services import notification_service
+
     # Notify moderators/admins about new pending recipe
     if db_recipe.status == "pending":
-        from app.services import notification_service
-
         mod_query = select(User.id).where(
             User.role.in_(["moderator", "admin"]),
             User.is_active == True,  # noqa: E712
@@ -538,6 +542,29 @@ async def create_recipe(
                 type="new_pending_recipe",
                 title=db_recipe.title,
                 message="",
+                recipe_id=db_recipe.id,
+            )
+            await db.commit()
+
+    # Notify followers when admin/mod publishes a recipe directly (status=approved)
+    if db_recipe.status == "approved":
+        from app.services import follow_service
+
+        follower_ids = await follow_service.get_follower_ids(db, user_id=db_recipe.owner_id)
+        follower_ids.discard(db_recipe.owner_id)
+        if follower_ids:
+            # Fetch author username for the notification body
+            owner_row = await db.execute(
+                select(User.username, User.display_name).where(User.id == db_recipe.owner_id)
+            )
+            owner = owner_row.one_or_none()
+            author_name = (owner.display_name or owner.username) if owner else ""
+            await notification_service.notify_bulk_and_broadcast(
+                db,
+                user_ids=list(follower_ids),
+                type="followed_user_published",
+                title=db_recipe.title,
+                message=author_name,
                 recipe_id=db_recipe.id,
             )
             await db.commit()
@@ -560,14 +587,19 @@ async def get_all_recipes(
     difficulty: str | None = None,
     cuisine: str | None = None,
     meal_type: str | None = None,
+    has_comments: bool = False,
     sort: str = "newest",
 ) -> Sequence[Recipe]:
     """Public feed — only approved recipes. Always.
 
-    ``sort`` accepts ``"newest"`` (default, ``id DESC``) or ``"popular"``
-    (``favorites_count DESC, id DESC`` — id break tie deterministically).
+    ``sort`` accepts ``"newest"`` (default), ``"popular"`` (engagement score),
+    ``"top_rated"`` (average rating), or ``"most_favorited"`` (favorites count).
+    ``has_comments=True`` filters to recipes with at least one comment.
     """
     query = _with_owner(select(Recipe).where(Recipe.status == "approved"))
+
+    if has_comments:
+        query = query.where(Recipe.comments_count > 0)
 
     # meal_type filter via RecipeTags join (used by "Show all" on category shelves)
     if meal_type:
@@ -585,6 +617,12 @@ async def get_all_recipes(
         cuisine=cuisine,
     )
     if sort == "popular":
+        query = query.order_by(Recipe.engagement_score.desc(), Recipe.id.desc())
+    elif sort == "top_rated":
+        query = query.order_by(
+            Recipe.average_rating.desc(), Recipe.ratings_count.desc(), Recipe.id.desc()
+        )
+    elif sort == "most_favorited":
         query = query.order_by(Recipe.favorites_count.desc(), Recipe.id.desc())
     else:
         query = query.order_by(Recipe.id.desc())
@@ -693,11 +731,23 @@ async def get_recipe_for_caller(
             await cache.set_model(key, response, ttl=cache_keys.TTL_RECIPE_DETAIL)
 
     if current_user is not None and response.status == "approved":
-        favorited = await favorite_service.get_favorited_recipe_ids(
-            db, user_id=current_user.id, recipe_ids=[recipe_id]
+        from app.services import rating_service
+
+        favorited, user_rating_row = await asyncio.gather(
+            favorite_service.get_favorited_recipe_ids(
+                db, user_id=current_user.id, recipe_ids=[recipe_id]
+            ),
+            rating_service.get_user_rating(
+                db, user_id=current_user.id, recipe_id=recipe_id
+            ),
         )
         # Fresh copy so we don't mutate the cached instance.
-        response = response.model_copy(update={"is_favorited": recipe_id in favorited})
+        response = response.model_copy(
+            update={
+                "is_favorited": recipe_id in favorited,
+                "user_rating": user_rating_row.rating if user_rating_row else None,
+            }
+        )
 
     return response
 
@@ -1230,6 +1280,10 @@ async def search_recipes_by_vector(
     final = [recipes_map[rid] for rid, _ in adaptive]
 
     if sort == "popular":
+        final.sort(key=lambda r: (-(r.engagement_score or 0), -r.id))
+    elif sort == "top_rated":
+        final.sort(key=lambda r: (-(r.average_rating or 0), -(r.ratings_count or 0), -r.id))
+    elif sort == "most_favorited":
         final.sort(key=lambda r: (-(r.favorites_count or 0), -r.id))
     return final
 

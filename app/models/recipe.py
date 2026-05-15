@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import text
@@ -40,6 +40,20 @@ class Recipe(Base):
     rejection_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     favorites_count: Mapped[int] = mapped_column(
         Integer, default=0, server_default=text("0"), nullable=False
+    )
+    average_rating: Mapped[float] = mapped_column(
+        Float, default=0.0, server_default=text("0.0"), nullable=False
+    )
+    ratings_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    comments_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    # engagement_score = favorites_count*1.0 + ratings_count*2.0 + comments_count*3.0
+    # Recomputed synchronously after every rating/comment/favorite mutation.
+    engagement_score: Mapped[float] = mapped_column(
+        Float, default=0.0, server_default=text("0.0"), nullable=False
     )
 
     # Relationship to User (lazy="raise" — must explicitly load via selectinload)
