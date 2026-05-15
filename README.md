@@ -1,195 +1,73 @@
-# Smart Recipe Finder API
+# Smart Recipe Finder — Backend
 
-This is the backend service for the "Smart Recipe Finder" application, built as part of a technical assessment. It provides a RESTful API for managing and searching recipes, all running within a Docker environment.
+RESTful API for a recipe platform with semantic vector search, content moderation, real-time notifications, and transactional email.
 
-Frontend – [Smart Recipe Finder Frontend](https://github.com/cesar0k/smart-recipe-finder-frontend)
+Frontend — [smart-recipe-finder-frontend](https://github.com/cesar0k/smart-recipe-finder-frontend)
 
 ## Tech Stack
 
-- **Language:** Python 3.12
-- **Framework:** FastAPI
-- **Database:** PostgreSQL 17
-- **Vector Search:** ChromaDB
-- **ORM:** SQLAlchemy
-- **Data Validation:** Pydantic v2
-- **Containerization:** Docker & Docker Compose
+| Layer | Technology |
+|---|---|
+| Language | Python 3.12 |
+| Framework | FastAPI (async) |
+| Database | PostgreSQL 17 + SQLAlchemy (async) |
+| Vector search | ChromaDB + `intfloat/multilingual-e5-large-instruct` |
+| Cache | Redis (version-scoped keys) |
+| Object storage | MinIO (S3-compatible) |
+| Auth | JWT access tokens + rotating refresh tokens, Google OAuth2 |
+| Email | aiosmtplib (any SMTP relay) |
+| Real-time | WebSocket notifications |
+| Containerisation | Docker Compose |
 
 ## Architecture
 
-The codebase follows a **thin controller / fat service** layering: HTTP endpoints in `app/api/v1/endpoints/` only translate the HTTP request, delegate to a service, and serialize the response. All business rules — caching, authorization, multi-step orchestration — live inside the corresponding service module.
+Thin controller / fat service layering:
 
-### Layers
+- **API layer** (`app/api/v1/endpoints/`) — request parsing, dependency injection, DTO mapping. No business logic, no direct cache calls.
+- **Service layer** (`app/services/`) — orchestrates DB, vector store, S3, cache, notifications, email. All mutating functions accept `cache: Cache | None` so they work from HTTP endpoints, background tasks, and CLI scripts.
+- **Domain exceptions** (`app/core/exceptions.py`) — `NotFoundError`, `NotAuthorizedError`, `InvalidStateError`, `ValidationError`, `InvalidCredentialsError`. Mapped to HTTP status codes in `app/main.py`; services stay framework-agnostic.
 
-- **API layer** (`app/api/v1/`) — request parsing, dependency injection (`current_user`, `cache`, `db`), DTO mapping. No `if`-driven business logic, no direct cache calls, no inline ownership checks.
-- **Service layer** (`app/services/`) — orchestrates models, vector store, S3, cache, notifications. Mutating functions accept `cache: Cache | None = None` so they're usable from HTTP endpoints, background workers, and CLI scripts (`seed_db.py`) alike.
-- **Domain exceptions** (`app/core/exceptions.py`) — `NotFoundError`, `NotAuthorizedError`, `InvalidStateError`, `ValidationError`, `InvalidCredentialsError`. Services raise these instead of `HTTPException`. Global FastAPI handlers in `app/main.py` map them to 404 / 403 / 400 / 409 / 401. This keeps services framework-agnostic.
+### Key design decisions
 
-### Cache invalidation policy
+**Cache invalidation** — version-scoped Redis keys for search and similar-recipe results (O(1) invalidation by bumping a counter). Per-recipe and per-user keys are invalidated explicitly after mutations.
 
-Each writer in the service layer owns the bumps for caches it can invalidate:
+**ORM safety** — all relationships use `lazy="raise"` or `lazy="noload"` to prevent accidental N+1 queries. Eager-load helpers (`_with_owner`, `_with_relations`) are used where needed.
 
-- `recipe_service.create_recipe / update_recipe / delete_recipe / resubmit_recipe / upload_recipe_images / delete_recipe_images` → bump search + similar versions and invalidate per-recipe keys.
-- `moderation_service.moderate_recipe / moderate_draft` → same plus `invalidate_on_moderation`.
-- `user_service.update_user / delete_user / upload_avatar`, `auth_service.update_user_profile` → `invalidate_on_user_change`.
+**Recipe moderation flow** — non-admin users submit drafts (`RecipeDraft`); moderators approve or reject via `/api/v1/moderation`. Admins bypass the draft step and publish directly.
 
-Read-through cache wrappers (`get_distinct_cuisines_cached`, `get_recipe_for_caller`, `get_pending_count_cached`, `get_public_profile_cached`) live next to the underlying queries — endpoints call them as one-liners.
+**Vector search quality** — LLM-based query rewriting via fal.ai (optional) merges results from the original and rewritten queries to improve recall. Tag classification runs as a background task after recipe creation.
 
-## Development Environment
-
-This project includes a `.devcontainer` configuration, allowing you to open and run the entire development environment in a Docker container using VS Code with the "Dev Containers" extension. This ensures a consistent and reproducible development setup.
-
-## Prerequisites
-
-Before you begin, ensure you have [Docker Desktop](https.www.docker.com/products/docker-desktop/) installed on your system.
+**Engagement scoring** — `engagement_score = favorites × 1.0 + ratings × 2.0 + comments × 3.0` recomputed synchronously after every mutation, powering the `popular` sort.
 
 ## Getting Started
 
-Follow these steps to get the application running locally.
+### Prerequisites
 
-### 1. Clone the Repository
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) (or any Docker + Compose setup).
+
+### 1. Clone and configure
 
 ```bash
 git clone https://github.com/cesar0k/smart-recipe-finder-backend.git
-cd smart-recipe-finder
+cd smart-recipe-finder-backend
+cp .env.example .env   # then fill in the required values
 ```
 
-### 2. Set Up Environment Variables
+Required `.env` values: `SECRET_KEY`, `DB_*`, `S3_*`, `CHROMA_COLLECTION_NAME`.
 
-Create a local environment file by copying the provided example.
+Optional: `GOOGLE_CLIENT_*` (OAuth2), `FAL_KEY` + `LLM_MODEL` (tag classification & query rewriting), `SMTP_*` (transactional email).
 
-**Linux / macOS:**
-
-```bash
-cp .env.example .env
-```
-
-**Windows (PowerShell):**
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Important: the application relies on vector search powered by an LLM backend — this requires a Hugging Face API token. Add the token to .env.example (or your local .env) as shown below:
-
-```dotenv
-HUGGINGFACE_API_TOKEN=<your_huggingface_token_here>
-```
-
-If you need to change the application or database ports because they are already in use on your machine, you can do so by editing the APP_PORT and DB_EXTERNAL_PORT variables in your local .env file.
-
-### 3. Build and Run the Application
-
-Use Docker Compose to build the images and start the services in detached mode (`-d`).
+### 2. Start services
 
 ```bash
 docker compose up --build -d
 ```
 
-The API service will now be running and accessible at `http://localhost:8001`.
+API available at `http://localhost:8001`. Interactive docs at `http://localhost:8001/docs`.
 
-## API Documentation
+Migrations run automatically on startup via Alembic.
 
-Once the application is running, the interactive API documentation (powered by Swagger UI) is available at:
-
-[**http://localhost:8001/docs**](http://localhost:8001/docs)
-
-You can use this interface to explore, test, and interact with all the available API endpoints.
-
-## Testing
-
-A comprehensive test suite has been newly implemented to ensure the reliability and correctness of the API endpoints. The tests run against a dedicated, isolated test database to ensure that test execution does not interfere with development data.
-
-To run the test suite, you first need to set up your test environment.
-
-### 1. Install Dependencies (Optional)
-
-Dependencies are already installed inside the Docker container. You only need to run this step if you intend to execute tests or scripts directly on your host machine (outside the Docker container):
-
-```bash
-uv sync
-```
-
-### 2. Run Tests
-
-The project includes a comprehensive test suite covering various functionalities. You can run different sets of tests as follows:
-
-#### Full Tests
-
-To run the entire test suite, execute `pytest` without any specific markers:
-
-```bash
-docker compose exec app pytest
-```
-
-#### Smoke Tests
-
-Smoke tests are a subset of tests designed to quickly verify that the most important functions of the application are working correctly. To run only the smoke tests execute:
-
-```bash
-docker compose exec app pytest -m smoke
-```
-
-#### CRUD Tests
-
-CRUD tests cover the full lifecycle of recipe management operations (Create, Read, Update, Delete). Unlike smoke tests, this suite performs a comprehensive check of the API functionality, including edge cases, partial updates, and error handling. To run the full functional test suite execute:
-
-```bash
-docker compose exec app pytest -m crud
-```
-
-#### Evaluation Tests
-
-Evaluation tests are designed to assess specific aspects of the application, often involving dedicated datasets or complex scenarios. To run only the evaluation tests execute:
-
-```bash
-docker compose exec app pytest -m eval
-```
-
-> **Note:** the test suite loads the embedding model into the same container as the live backend. On memory-constrained setups the backend may become unresponsive after tests finish. If that happens, restart the app:
->
-> ```bash
-> docker compose restart app
-> ```
-
-## Seeding the Database
-
-To populate your database with sample recipe data, you can use the `seed_db.py` script. This is particularly useful for development and testing purposes.
-
-The script can seed the database with recipes in different languages. Use the `--lang` flag to specify the language. Supported languages are `en` (English) and `ru` (Russian).
-
-### English Seeding (Default)
-
-To seed the database with English recipes, run the following command:
-
-```bash
-docker compose exec app python scripts/seed_db.py --lang en
-```
-
-If you don't specify a language, it will default to English.
-
-### Russian Seeding
-
-To seed the database with Russian recipes, run:
-
-```bash
-docker compose exec app python scripts/seed_db.py --lang ru
-```
-
-The script will clear existing recipes and add a predefined set to your database, which you can then query via the API.
-
-> **Note:** the seed script loads the embedding model into the same container as the live backend. On memory-constrained setups the backend may become unresponsive after the script finishes. If that happens, restart the app:
->
-> ```bash
-> docker compose restart app
-> ```
-
-## Admin Management
-
-The `scripts/create_admin.py` CLI manages the admin account. Use it to create the first admin or to transfer the admin role to another user.
-
-### Create an admin
-
-**Linux / macOS:**
+### 3. Create an admin account
 
 ```bash
 docker compose exec app python scripts/create_admin.py create \
@@ -198,119 +76,114 @@ docker compose exec app python scripts/create_admin.py create \
     --password 'secure_password'
 ```
 
-**Windows (PowerShell):**
-
-```powershell
-docker compose exec app python scripts/create_admin.py create `
-    --email admin@example.com `
-    --username admin `
-    --password 'secure_password'
-```
-
-### Transfer admin to another user
-
-**Linux / macOS:**
+To transfer admin to another user:
 
 ```bash
-docker compose exec app python scripts/create_admin.py transfer \
-    --to username_or_email
+docker compose exec app python scripts/create_admin.py transfer --to username_or_email
 ```
 
-**Windows (PowerShell):**
-
-```powershell
-docker compose exec app python scripts/create_admin.py transfer `
-    --to username_or_email
-```
-
-## Search Capabilities
-
-### Vector Search
-
-The application implements vector search using ChromaDB to find semantically similar recipes. This allows for more "natural language" queries (e.g., "healthy chicken dishes for dinner") and finds recipes that are conceptually related, even if they don't share exact keywords.
-
-## Evaluation & Benchmarking
-
-One of the core goals of this project is to quantitatively compare different search and filtering methods.
-
-### Metrics Implemented
-
-- **Accuracy:** Percentage of queries where the target recipe was found.
-- **Latency:** Average execution time per query.
-- **Mean Reciprocal Rank (MRR):** Measures ranking quality (how high the relevant recipe appears).
-- **ZRR (Zero Result Rate):** Percentage of queries returning no results.
-
-### How to Run Benchmarks
-
-The evaluation script can be run for different languages. Use the `--lang` flag to specify which dataset to use.
-
-**Run Evaluation Script (English - Default)**:
+### 4. Seed sample data (optional)
 
 ```bash
-docker compose exec app python scripts/evaluate.py --lang en
+docker compose exec app python scripts/seed_db.py --lang ru  # or --lang en
 ```
 
-**Run Evaluation Script (Russian)**:
+> Running seed, tests, or evaluation loads the embedding model into the app container. On memory-constrained machines the backend may become unresponsive afterwards — restart with `docker compose restart app`.
+
+## Features
+
+### Recipes
+
+- Full CRUD with image upload (up to 5 photos per recipe, auto-converted to WebP with thumbnails).
+- Draft/moderation workflow: regular users submit drafts, moderators approve or reject.
+- Difficulty levels, cooking time, cuisine, ingredient lists.
+- Status badges: pending / approved / rejected / has pending draft.
+
+### Search & Discovery
+
+- Semantic vector search (multilingual, natural-language queries).
+- Tag-based filtering generated by an LLM (vegetarian, vegan, gluten-free, meal type, cuisine, etc.).
+- Ingredient include/exclude filtering with Russian morphology support (`pymorphy3`).
+- Sort by: newest, popular (engagement score), top rated, most favorited.
+- Category shelves on the home feed (grouped by meal type).
+- Similar recipes sidebar (vector similarity).
+
+### User System
+
+- Registration (local) and Google OAuth2.
+- JWT access tokens (30 min) + rotating refresh tokens (7 days).
+- Role-based access control: `user`, `moderator`, `admin`.
+- Public profiles with recipe counts and follower counts.
+- Avatar upload (S3).
+
+### Engagement
+
+- Star ratings (1–5, one per user per recipe, mutable).
+- Threaded comments (2 levels: comment + replies). Soft delete preserves replies.
+- Comment reports — submitted to moderators for review.
+- Favorites.
+- User follows — subscribe to authors and get notified of new recipes.
+
+### Email
+
+- Transactional: email verification, password reset, email-change confirmation.
+- Notification emails: new comment, comment reply, recipe approved/rejected, new follower, new recipe from followed author.
+- Per-user notification preferences (opt out per type).
+- Per-user language preference (`ru` / `en`) — emails sent in the user's language.
+- Global kill-switch (`EMAILS_ENABLED=false`).
+
+### Notifications
+
+- In-app notifications stored in PostgreSQL.
+- Real-time delivery via WebSocket (multi-tab / multi-device per user).
+- Unread count badge.
+- Mark as read / delete per notification or all at once.
+
+### Moderation
+
+- Pending recipe queue.
+- Comment report queue with aggregated report counts.
+- Moderation log (who approved/rejected what and when).
+- Moderators and admins receive in-app + email alerts for new pending content.
+
+## Testing
 
 ```bash
-docker compose exec app python scripts/evaluate.py --lang ru
+docker compose exec app pytest             # all tests
+docker compose exec app pytest -m smoke    # fast sanity checks (~30 s)
+docker compose exec app pytest -m crud     # full CRUD + edge cases
+docker compose exec app pytest -m eval     # search quality evaluation
 ```
 
-This will run a series of tests and generate a performance comparison chart.
+Tests use an isolated `recipes_test_db` PostgreSQL database and `recipes_test_collection` ChromaDB collection, both torn down after the session.
 
-> **Note:** the evaluation script loads the embedding model into the same container as the live backend. On memory-constrained machines the backend may become unresponsive after the script finishes. If that happens, restart the app:
->
-> ```bash
-> docker compose restart app
-> ```
+## Search Evaluation & Benchmarks
 
-### Redis Cache Benchmark
+### Evaluate search quality
 
-Vector search is the most expensive operation in the API: each call runs the embedding model and a ChromaDB similarity query. We cache the vector-search IDs in Redis with version-scoped keys; the script below measures the impact.
+```bash
+docker compose exec app python scripts/evaluate.py --lang ru  # or --lang en
+```
+
+Produces `evaluation_results.png` with Accuracy, MRR, ZRR, and latency metrics.
+
+### Calibrate distance thresholds
+
+```bash
+docker compose exec app python scripts/calibrate_thresholds.py
+```
+
+### Cache benchmark
 
 ```bash
 docker compose exec app python scripts/benchmark_search.py --iterations 10
 ```
 
-The script calls `recipe_service.search_recipes_by_vector()` directly (same approach as `evaluate.py`) to isolate the cache impact from the HTTP stack. Two scenarios are compared:
+Compares cold (cache miss) vs warm (cache hit) latency. Representative result on a laptop CPU:
 
-- **cold** — forces a cache MISS on every call by bumping `search:version`.
-- **warm** — pre-warms the cache, then hits it on every subsequent call.
+| Scenario | p50 | p95 | avg | VectorStore calls |
+|---|---|---|---|---|
+| cold | 307 ms | 2683 ms | 975 ms | 50 / 50 |
+| warm | 2 ms | 2 ms | 2 ms | 0 / 50 |
 
-For each scenario the script collects latency percentiles (p50/p95/p99) and reads `VectorStore.search_calls_count` — the total number of times the heavy embedding + ChromaDB pipeline actually ran.
-
-**Representative result** (5 iterations × 10 queries = 50 calls per scenario, local Docker, laptop CPU):
-
-| Scenario | calls | `vector_store.search()` | p50    | p95     | p99      | avg    |
-|----------|-------|-------------------------|--------|---------|----------|--------|
-| cold     | 50    | **50**                  | 307 ms | 2683 ms | 11463 ms | 975 ms |
-| warm     | 50    | **0**                   | 2 ms   | 2 ms    | 3 ms     | 2 ms   |
-
-- **Speedup:** ~500× on average, ~1000× on p95.
-- **Backend load:** 100% of expensive vector-search invocations eliminated on repeated queries.
-- Chart: `benchmark_results.png` (generated next to the script).
-
-> **Note:** same caveat as `evaluate.py` — the benchmark loads the embedding model inside the app container, which can leave the backend unresponsive on memory-constrained machines. If that happens, restart the app:
->
-> ```bash
-> docker compose restart app
-> ```
-
-## Visual Results
-
-Upon running the evaluation script, a graph file **`evaluation_results.png`** will be generated in the project root.
-
-The cache benchmark produces a separate file **`benchmark_results.png`** with latency histograms and percentile bars for cold vs. warm runs.
-
-## Project Status
-
-Currently implemented features:
-
-- [x] Project setup with Docker and a scalable layered architecture.
-- [x] **Create** and **Read** (by ID and list all) operations for recipes.
-- [x] **Update** and **Delete** operations for recipes.
-- [x] **Smart Filtering Logic** (Refactored).
-- [x] Vector Search Implementation.
-- [x] Comprehensive test suite with an isolated database.
-- [x] Script for evaluating search and filtering methods with **graphical** representation in the form of a file.
-- [x] Devcontainer for a consistent development environment.
+~500× average speedup; all expensive embedding + ChromaDB calls eliminated on repeated queries.
