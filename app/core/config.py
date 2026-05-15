@@ -97,6 +97,13 @@ class Settings(BaseSettings):
     # Base URL of the frontend — used to build links inside emails
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Google reCAPTCHA v3
+    RECAPTCHA_SECRET_KEY: str = ""
+    # Minimum score to accept (0.0–1.0). Set to 0.0 to disable score check.
+    RECAPTCHA_MIN_SCORE: float = 0.5
+    # Set to False to skip verification entirely (e.g. in automated tests)
+    RECAPTCHA_ENABLED: bool = True
+
     @model_validator(mode="after")
     def check_required_fields(self) -> Self:
         missing_fields = []

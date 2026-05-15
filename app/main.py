@@ -17,6 +17,7 @@ from app.core.exceptions import (
     InvalidStateError,
     NotAuthorizedError,
     NotFoundError,
+    RecaptchaError,
     ValidationError,
 )
 from app.core.s3_client import s3_client
@@ -83,6 +84,11 @@ async def _unauthorized_handler(_request: Request, exc: InvalidCredentialsError)
         status_code=401,
         content={"detail": str(exc) or "Invalid credentials"},
     )
+
+
+@app.exception_handler(RecaptchaError)
+async def _recaptcha_handler(_request: Request, exc: RecaptchaError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc) or "reCAPTCHA failed"})
 
 
 app.include_router(api_router, prefix="/api/v1")
