@@ -60,23 +60,39 @@ async def _schedule_notification_email(
     message: str,
     recipe_id: int | None = None,
 ) -> None:
-    """Load user and fire-and-forget a notification email. Best-effort."""
+    """Load user and fire-and-forget a notification email in its own session.
+
+    The caller's session may already be committed/closed by the time the task
+    runs, so we open a fresh AsyncSession instead of reusing `db`.
+    """
     try:
+        from app.db.session import AsyncSessionLocal
         from app.services.email_service import send_notification_email  # avoid circular import
 
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if user is None:
             return
-        asyncio.create_task(
-            send_notification_email(
-                db,
-                user=user,
-                notification_type=notification_type,
-                message=message,
-                recipe_id=recipe_id,
-            )
-        )
+
+        async def _send() -> None:
+            async with AsyncSessionLocal() as session:
+                try:
+                    await send_notification_email(
+                        session,
+                        user=user,
+                        notification_type=notification_type,
+                        message=message,
+                        recipe_id=recipe_id,
+                    )
+                except Exception:
+                    logger.debug(
+                        "Notification email failed for user_id=%d type=%s",
+                        user_id,
+                        notification_type,
+                        exc_info=True,
+                    )
+
+        asyncio.create_task(_send())
     except Exception:
         logger.debug("Failed to schedule notification email for user_id=%d", user_id)
 
@@ -90,6 +106,7 @@ async def notify_and_broadcast(
     message: str,
     recipe_id: int | None = None,
     comment_id: int | None = None,
+    from_user_id: int | None = None,
 ) -> Notification:
     """Create notification, flush to DB, send via WebSocket, and schedule email."""
     notif = Notification(
@@ -99,6 +116,7 @@ async def notify_and_broadcast(
         message=message,
         recipe_id=recipe_id,
         comment_id=comment_id,
+        from_user_id=from_user_id,
     )
     db.add(notif)
     await db.flush()

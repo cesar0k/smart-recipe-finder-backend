@@ -71,8 +71,9 @@ async def add_follow(
         user_id=followed_id,
         type="user_followed",
         title=user.display_name or user.username,
-        message=f"@{user.username}",
+        message=user.username,
         recipe_id=None,
+        from_user_id=user.id,
     )
     await db.commit()
 

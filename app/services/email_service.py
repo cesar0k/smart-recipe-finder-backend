@@ -128,7 +128,7 @@ def _base_template(title: str, body_html: str, cta_url: str = "", cta_text: str 
     cta_block = ""
     if cta_url and cta_text:
         cta_block = f"""
-        <p style="text-align:center;margin:32px 0;">
+        <p style="text-align:center;margin:16px 0 0;">
           <a href="{cta_url}"
              style="background:#111827;color:#fff;padding:12px 28px;
                     border-radius:24px;text-decoration:none;font-weight:600;
@@ -394,12 +394,15 @@ async def send_notification_email(
     if recipe_id and cta_label:
         cta_url = f"{settings.FRONTEND_URL}/recipe/{recipe_id}"
 
+    # Build a human-readable body depending on notification type
+    body_text = _build_notification_body(notification_type, message, lang)
+
     body = f"""
-    <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">
+    <p style="font-size:16px;line-height:1.6;margin:0 0 12px;">
       {greeting}, <strong>{user.display_name or user.username}</strong>!
     </p>
     <p style="font-size:15px;line-height:1.6;color:#374151;margin:0;">
-      {message}
+      {body_text}
     </p>"""
 
     html = _base_template(
@@ -409,3 +412,78 @@ async def send_notification_email(
         cta_text=cta_label,
     )
     await send_email(user.email, f"{subject} — Smart Recipe Finder", html)
+
+
+def _build_notification_body(notification_type: str, message: str, lang: str) -> str:
+    """Return a human-readable email body sentence for the given notification type."""
+    ru = lang == "ru"
+    # message field carries: recipe title for recipe events, username for follow events
+    name = message or ""
+    if notification_type == "user_followed":
+        return (
+            f"Пользователь <strong>@{name}</strong> подписался на вас."
+            if ru else
+            f"<strong>@{name}</strong> started following you."
+        )
+    if notification_type == "followed_user_published":
+        return (
+            f"Автор <strong>{name}</strong> опубликовал новый рецепт."
+            if ru else
+            f"<strong>{name}</strong> published a new recipe."
+        )
+    if notification_type == "new_comment":
+        return (
+            f"Кто-то оставил комментарий к вашему рецепту «<strong>{name}</strong>»."
+            if ru else
+            f"Someone commented on your recipe «<strong>{name}</strong>»."
+        )
+    if notification_type == "comment_reply":
+        return (
+            f"Вам ответили в обсуждении рецепта «<strong>{name}</strong>»."
+            if ru else
+            f"Someone replied to your comment on «<strong>{name}</strong>»."
+        )
+    if notification_type == "comment_reported":
+        return (
+            f"Поступила жалоба на комментарий к рецепту «<strong>{name}</strong>»."
+            if ru else
+            f"A comment on «<strong>{name}</strong>» has been reported."
+        )
+    if notification_type == "new_pending_recipe":
+        return (
+            f"Рецепт «<strong>{name}</strong>» ожидает модерации."
+            if ru else
+            f"Recipe «<strong>{name}</strong>» is waiting for moderation."
+        )
+    if notification_type == "recipe_approved":
+        return (
+            f"Ваш рецепт «<strong>{name}</strong>» прошёл модерацию и опубликован."
+            if ru else
+            f"Your recipe «<strong>{name}</strong>» has been approved and published."
+        )
+    if notification_type == "recipe_rejected":
+        return (
+            f"К сожалению, рецепт «<strong>{name}</strong>» не прошёл модерацию."
+            if ru else
+            f"Unfortunately, your recipe «<strong>{name}</strong>» was not approved."
+        )
+    if notification_type == "draft_approved":
+        return (
+            f"Изменения в рецепте «<strong>{name}</strong>» одобрены."
+            if ru else
+            f"Your edits to «<strong>{name}</strong>» have been approved."
+        )
+    if notification_type == "draft_rejected":
+        return (
+            f"Изменения в рецепте «<strong>{name}</strong>» отклонены."
+            if ru else
+            f"Your edits to «<strong>{name}</strong>» were not approved."
+        )
+    if notification_type == "recipe_deleted":
+        return (
+            f"Рецепт «<strong>{name}</strong>» был удалён модератором."
+            if ru else
+            f"Your recipe «<strong>{name}</strong>» was removed by a moderator."
+        )
+    # Fallback — use raw message
+    return name

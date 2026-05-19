@@ -14,6 +14,7 @@ class NotificationResponse(BaseModel):
     is_read: bool
     recipe_id: int | None = None
     comment_id: int | None = None
+    from_user_id: int | None = None
     created_at: datetime
 
     @field_serializer("created_at")
