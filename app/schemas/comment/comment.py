@@ -22,6 +22,7 @@ class CommentResponse(BaseModel):
     user_id: int
     author_username: str | None = None
     author_avatar_url: str | None = None
+    author_role: str | None = None   # "admin" | "moderator" | None
     parent_comment_id: int | None = None
     content: str
     is_deleted: bool

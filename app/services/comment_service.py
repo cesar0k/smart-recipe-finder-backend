@@ -51,14 +51,24 @@ async def _recompute_comments_count(db: AsyncSession, *, recipe_id: int) -> None
     await recompute_engagement_score(db, recipe_id=recipe_id)
 
 
+def _user_role(user: object) -> str | None:
+    """Return 'admin' | 'moderator' | None based on user.role."""
+    role = getattr(user, "role", None)
+    if role in ("admin", "moderator"):
+        return role
+    return None
+
+
 def _build_response(comment: RecipeComment, replies: list[RecipeComment]) -> CommentResponse:
     """Assemble a CommentResponse from ORM objects (author already loaded)."""
     author_username: str | None = None
     author_avatar_url: str | None = None
+    author_role: str | None = None
     try:
         if comment.user:
             author_username = comment.user.username
             author_avatar_url = comment.user.avatar_url
+            author_role = _user_role(comment.user)
     except Exception:
         pass
 
@@ -66,10 +76,12 @@ def _build_response(comment: RecipeComment, replies: list[RecipeComment]) -> Com
     for r in replies:
         r_username: str | None = None
         r_avatar: str | None = None
+        r_role: str | None = None
         try:
             if r.user:
                 r_username = r.user.username
                 r_avatar = r.user.avatar_url
+                r_role = _user_role(r.user)
         except Exception:
             pass
         reply_responses.append(
@@ -79,6 +91,7 @@ def _build_response(comment: RecipeComment, replies: list[RecipeComment]) -> Com
                 user_id=r.user_id,
                 author_username=r_username,
                 author_avatar_url=r_avatar,
+                author_role=r_role,
                 parent_comment_id=r.parent_comment_id,
                 content=r.content,
                 is_deleted=r.is_deleted,
@@ -94,6 +107,7 @@ def _build_response(comment: RecipeComment, replies: list[RecipeComment]) -> Com
         user_id=comment.user_id,
         author_username=author_username,
         author_avatar_url=author_avatar_url,
+        author_role=author_role,
         parent_comment_id=comment.parent_comment_id,
         content=comment.content,
         is_deleted=comment.is_deleted,
