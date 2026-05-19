@@ -22,6 +22,7 @@ from app.core.exceptions import (
 )
 from app.core.s3_client import s3_client
 from app.core.vector_store import vector_store
+from app.services.tag_backfill import run_tag_backfill_loop
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_redis()
     await s3_client.ensure_bucket_exists()
     asyncio.create_task(asyncio.to_thread(vector_store.preload_model))
+    stop_event = asyncio.Event()
+    backfill_task = asyncio.create_task(run_tag_backfill_loop(stop_event))
     try:
         yield
     finally:
+        stop_event.set()
+        await backfill_task
         await close_redis()
 
 
