@@ -61,8 +61,15 @@ class Recipe(Base):
 
     # Relationship to RecipeTags — 1:1, NULL until background task completes.
     # lazy="noload": never auto-load (prevents N+1), returns None if not selectinloaded.
+    # passive_deletes=True + cascade="all, delete-orphan" lets the DB's ON DELETE
+    # CASCADE handle the FK cleanup without SQLAlchemy trying to NULL it out first.
     tags: Mapped[RecipeTags | None] = relationship(
-        "RecipeTags", back_populates="recipe", lazy="noload", uselist=False
+        "RecipeTags",
+        back_populates="recipe",
+        lazy="noload",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     @property
