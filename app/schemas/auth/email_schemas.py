@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -12,6 +14,7 @@ class VerifyEmailRequest(BaseModel):
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
     recaptcha_token: str | None = None
+    recaptcha_type: Literal["v2", "v3"] = "v3"
 
 
 class ResetPasswordRequest(BaseModel):
