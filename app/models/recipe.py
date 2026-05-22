@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Float, ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import text
 
@@ -13,6 +12,7 @@ from .enums import RecipeDifficulty, RecipeStatus, pg_enum
 if TYPE_CHECKING:
     from .cuisine import Cuisine
     from .recipe_image import RecipeImage
+    from .recipe_ingredient import RecipeIngredient
     from .recipe_tags import RecipeTags
     from .user import User
 
@@ -32,7 +32,6 @@ class Recipe(Base):
     cuisine_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("cuisines.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    ingredients: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=[], nullable=False)
     owner_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -92,6 +91,34 @@ class Recipe(Base):
         passive_deletes=True,
         lazy="noload",
     )
+
+    # Ingredients via the M2M RecipeIngredient table. order matches the old
+    # JSONB array order via RecipeIngredient.position. lazy="noload" so we
+    # don't accidentally trigger an N+1; consumers must selectinload it.
+    recipe_ingredients: Mapped[list[RecipeIngredient]] = relationship(
+        "RecipeIngredient",
+        order_by="RecipeIngredient.position",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="noload",
+    )
+
+    @property
+    def ingredients(self) -> list[dict[str, str | None]]:
+        """Pydantic-compatible accessor — list of ``{name, amount, unit}`` dicts
+        in display order. Requires ``recipe_ingredients`` AND
+        ``recipe_ingredients.ingredient`` to be eager-loaded."""
+        try:
+            return [
+                {
+                    "name": ri.ingredient.name,
+                    "amount": ri.amount,
+                    "unit": ri.unit,
+                }
+                for ri in self.recipe_ingredients
+            ]
+        except Exception:
+            return []
 
     @property
     def image_urls(self) -> list[str]:

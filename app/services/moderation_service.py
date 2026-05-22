@@ -278,7 +278,7 @@ async def moderate_draft(
             await db.refresh(draft)
             return draft
 
-        from app.services import cuisine_service
+        from app.services import cuisine_service, recipe_service as _recipe_svc
 
         recipe.title = draft.title
         recipe.instructions = draft.instructions
@@ -286,8 +286,20 @@ async def moderate_draft(
         recipe.difficulty = draft.difficulty
         cuisine_obj = await cuisine_service.get_or_create_by_name(db, name=draft.cuisine)
         recipe.cuisine_id = cuisine_obj.id if cuisine_obj else None
-        recipe.ingredients = draft.ingredients
+        # draft.ingredients is still JSONB list[{name, amount, unit}] — extract
+        # names and rebuild the normalised M2M.
+        draft_ingredient_names = [
+            (item.get("name") or "")
+            for item in (draft.ingredients or [])
+            if item.get("name")
+        ]
+        await _recipe_svc._set_recipe_ingredients(db, recipe, draft_ingredient_names)
         db.add(recipe)
+        # Flush + reload relationships so _create_semantic_document sees the
+        # ingredient names (via the .ingredients property) we just attached.
+        await db.flush()
+        await _recipe_svc._ensure_cuisine_loaded(db, recipe)
+        await _recipe_svc._ensure_ingredients_loaded(db, recipe)
 
         text, meta = _create_semantic_document(recipe)
         await vector_store.upsert_recipe(

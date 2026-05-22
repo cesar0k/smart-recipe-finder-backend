@@ -170,10 +170,17 @@ async def classify_recipe_tags(recipe_id: int) -> None:
         from app.models.recipe_tags import RecipeTags
 
         async with AsyncSessionLocal() as db:
+            from app.models.recipe_ingredient import RecipeIngredient
+
             result = await db.execute(
                 select(Recipe)
                 .where(Recipe.id == recipe_id)
-                .options(selectinload(Recipe.cuisine_ref))
+                .options(
+                    selectinload(Recipe.cuisine_ref),
+                    selectinload(Recipe.recipe_ingredients).selectinload(
+                        RecipeIngredient.ingredient
+                    ),
+                )
             )
             recipe = result.scalar_one_or_none()
             if recipe is None:

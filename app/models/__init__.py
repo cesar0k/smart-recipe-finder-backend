@@ -1,6 +1,7 @@
 from .base import Base
 from .cuisine import Cuisine
 from .email_notification_preference import EmailNotificationPreference
+from .ingredient import Ingredient
 from .moderation_log import ModerationLog
 from .user_follow import UserFollow
 from .notification import Notification
@@ -10,6 +11,7 @@ from .recipe_comment_report import RecipeCommentReport
 from .recipe_draft import RecipeDraft
 from .recipe_favorite import RecipeFavorite
 from .recipe_image import RecipeImage
+from .recipe_ingredient import RecipeIngredient
 from .recipe_rating import RecipeRating
 from .recipe_tags import RecipeTags
 from .refresh_token import RefreshToken
@@ -19,6 +21,7 @@ __all__ = [
     "Base",
     "Cuisine",
     "EmailNotificationPreference",
+    "Ingredient",
     "ModerationLog",
     "UserFollow",
     "Notification",
@@ -28,6 +31,7 @@ __all__ = [
     "RecipeDraft",
     "RecipeFavorite",
     "RecipeImage",
+    "RecipeIngredient",
     "RecipeRating",
     "RecipeTags",
     "RefreshToken",
