@@ -2,13 +2,15 @@ import asyncio
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.exceptions import InvalidCredentialsError
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.models.user import User
 from app.services import auth_service, captcha_service, email_service
@@ -22,6 +24,11 @@ from app.services.google_auth_service import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Tight per-IP rate limit on the credential-handling endpoints. These are the
+# obvious targets for brute force / spam, so we cap them lower than the
+# blanket /api/v1 default. Applied via decorator on individual routes below.
+_AUTH_LIMIT = settings.RATE_LIMIT_AUTH
+
 
 @router.post(
     "/register",
@@ -29,7 +36,9 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
     operation_id="register_user",
 )
+@limiter.limit(_AUTH_LIMIT)
 async def register(
+    request: Request,
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     user_in: schemas.UserCreate,
@@ -57,7 +66,9 @@ async def register(
     response_model=schemas.TokenPair,
     operation_id="login_user",
 )
+@limiter.limit(_AUTH_LIMIT)
 async def login(
+    request: Request,
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
@@ -105,7 +116,9 @@ async def logout(
     response_model=schemas.TokenPair,
     operation_id="google_auth",
 )
+@limiter.limit(_AUTH_LIMIT)
 async def google_auth(
+    request: Request,
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     body: schemas.GoogleAuthCode,
@@ -132,7 +145,9 @@ async def google_auth(
     status_code=status.HTTP_200_OK,
     operation_id="send_verification_email",
 )
+@limiter.limit(_AUTH_LIMIT)
 async def send_verification_email(
+    request: Request,
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
@@ -148,7 +163,9 @@ async def send_verification_email(
     response_model=schemas.UserResponse,
     operation_id="verify_email",
 )
+@limiter.limit(_AUTH_LIMIT)
 async def verify_email(
+    request: Request,
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     body: schemas.VerifyEmailRequest,
@@ -164,7 +181,9 @@ async def verify_email(
     status_code=status.HTTP_200_OK,
     operation_id="forgot_password",
 )
+@limiter.limit(_AUTH_LIMIT)
 async def forgot_password(
+    request: Request,
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     body: schemas.ForgotPasswordRequest,
@@ -192,7 +211,9 @@ async def forgot_password(
     response_model=schemas.UserResponse,
     operation_id="reset_password",
 )
+@limiter.limit(_AUTH_LIMIT)
 async def reset_password(
+    request: Request,
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     body: schemas.ResetPasswordRequest,
