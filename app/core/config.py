@@ -9,6 +9,18 @@ class Settings(BaseSettings):
 
     APP_PORT: int = 8001
 
+    # "development" or "production". In production we hide /docs, /redoc,
+    # /openapi.json and enforce TrustedHostMiddleware.
+    ENVIRONMENT: str = "development"
+
+    # Hosts allowed by TrustedHostMiddleware in production. In development
+    # this is ignored. "*" allows any host (matches dev/test).
+    ALLOWED_HOSTS: list[str] = ["*"]
+
+    # Rate limits applied via slowapi. Per IP.
+    RATE_LIMIT_DEFAULT: str = "120/minute"   # blanket limit on /api/v1/*
+    RATE_LIMIT_AUTH: str = "10/minute"       # login / register / password-reset / verify-email
+
     SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7

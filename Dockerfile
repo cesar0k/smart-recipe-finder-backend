@@ -24,4 +24,8 @@ COPY . .
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app"]
+# --proxy-headers + --forwarded-allow-ips="*" so request.client.host reflects
+# the real client IP (read from X-Forwarded-For), not the upstream proxy.
+# Without this, slowapi would see every request as coming from nginx/CF and
+# rate-limit all users as one.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --proxy-headers --forwarded-allow-ips=*"]

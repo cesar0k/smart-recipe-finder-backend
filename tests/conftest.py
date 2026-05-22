@@ -84,6 +84,10 @@ async def async_client(
     from app.db.session import get_db
     from app.main import app
 
+    # Rate limits would fire spuriously across the test suite (lots of
+    # repeated requests from the same in-process client).
+    app.state.limiter.enabled = False
+
     monkeypatch.setattr("app.services.recipe_service.vector_store", test_vector_store)
     monkeypatch.setattr("app.core.vector_store.vector_store", test_vector_store)
 

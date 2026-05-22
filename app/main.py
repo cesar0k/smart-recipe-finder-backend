@@ -6,8 +6,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.v1.api import api_router
 from app.core.cache import close_redis, init_redis
@@ -20,12 +24,15 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.core.rate_limit import limiter
 from app.core.s3_client import s3_client
 from app.core.vector_store import vector_store
 
 logger = logging.getLogger(__name__)
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
+
+_IS_PROD = settings.ENVIRONMENT == "production"
 
 
 @asynccontextmanager
@@ -46,7 +53,29 @@ class RootResponse(BaseModel):
     documentation_url: str
 
 
-app = FastAPI(title="Smart Recipes Finder", version="2.0.0", lifespan=lifespan)
+# In production, hide the interactive docs / OpenAPI schema so the API
+# surface isn't trivially browsable from the public domain.
+app = FastAPI(
+    title="Smart Recipes Finder",
+    version="2.0.0",
+    lifespan=lifespan,
+    docs_url=None if _IS_PROD else "/docs",
+    redoc_url=None if _IS_PROD else "/redoc",
+    openapi_url=None if _IS_PROD else "/openapi.json",
+)
+
+# Wire up the SlowAPI limiter (defined in app.core.rate_limit). Counters live
+# in Redis so multiple uvicorn workers share the same bucket; per-route stricter
+# limits (auth endpoints) are layered on top via @limiter.limit decorators.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+# Reject requests with a Host header outside the allow-list. Only enforced
+# in production; dev/test stays permissive so `localhost`, `127.0.0.1`, the
+# docker-compose service name etc. all work.
+if _IS_PROD:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 
 
 app.add_middleware(
