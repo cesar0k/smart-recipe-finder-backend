@@ -11,7 +11,7 @@ class VerifyEmailRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
-    recaptcha_token: str | None = None
+    captcha_token: str | None = None
 
 
 class ResetPasswordRequest(BaseModel):

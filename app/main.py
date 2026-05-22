@@ -13,11 +13,11 @@ from app.api.v1.api import api_router
 from app.core.cache import close_redis, init_redis
 from app.core.config import settings
 from app.core.exceptions import (
+    CaptchaError,
     InvalidCredentialsError,
     InvalidStateError,
     NotAuthorizedError,
     NotFoundError,
-    RecaptchaError,
     ValidationError,
 )
 from app.core.s3_client import s3_client
@@ -86,9 +86,9 @@ async def _unauthorized_handler(_request: Request, exc: InvalidCredentialsError)
     )
 
 
-@app.exception_handler(RecaptchaError)
-async def _recaptcha_handler(_request: Request, exc: RecaptchaError) -> JSONResponse:
-    return JSONResponse(status_code=400, content={"detail": str(exc) or "reCAPTCHA failed"})
+@app.exception_handler(CaptchaError)
+async def _captcha_handler(_request: Request, exc: CaptchaError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc) or "Captcha failed"})
 
 
 app.include_router(api_router, prefix="/api/v1")

@@ -7,4 +7,4 @@ class UserCreate(BaseModel):
     display_name: str | None = Field(None, max_length=200)
     password: str = Field(..., min_length=8, max_length=128)
     language: str = Field(default="ru", pattern="^(ru|en)$")
-    recaptcha_token: str | None = None
+    captcha_token: str | None = None

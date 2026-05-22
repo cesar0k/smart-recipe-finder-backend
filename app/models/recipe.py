@@ -82,6 +82,24 @@ class Recipe(Base):
             return None
 
     @property
+    def owner_display_name(self) -> str | None:
+        """Optional display name set by the owner. None when not provided —
+        callers fall back to username. Same loading semantics as
+        owner_username (relies on the owner relationship being eager-loaded)."""
+        try:
+            return self.owner.display_name if self.owner else None
+        except Exception:
+            return None
+
+    @property
+    def owner_avatar_url(self) -> str | None:
+        """Avatar URL of the owner, if uploaded. Same loading semantics."""
+        try:
+            return self.owner.avatar_url if self.owner else None
+        except Exception:
+            return None
+
+    @property
     def has_pending_draft(self) -> bool:
         """Set dynamically by service layer when needed. Defaults to False."""
         return getattr(self, "_has_pending_draft", False)

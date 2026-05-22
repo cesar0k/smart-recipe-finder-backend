@@ -11,7 +11,7 @@ from app.api.deps import get_current_user
 from app.core.exceptions import InvalidCredentialsError
 from app.db.session import get_db
 from app.models.user import User
-from app.services import auth_service, email_service, recaptcha_service
+from app.services import auth_service, captcha_service, email_service
 from app.services.auth_service import DeactivatedUserError
 from app.services.google_auth_service import (
     GoogleAuthError,
@@ -34,7 +34,7 @@ async def register(
     db: Annotated[AsyncSession, Depends(get_db)],
     user_in: schemas.UserCreate,
 ) -> schemas.UserResponse:
-    await recaptcha_service.verify(user_in.recaptcha_token or "", action="register")
+    await captcha_service.verify(user_in.captcha_token or "", action="register")
     user = await auth_service.register_user(
         db,
         email=user_in.email,
@@ -61,9 +61,9 @@ async def login(
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    x_recaptcha_token: Annotated[str | None, Header()] = None,
+    x_captcha_token: Annotated[str | None, Header()] = None,
 ) -> schemas.TokenPair:
-    await recaptcha_service.verify(x_recaptcha_token or "", action="login")
+    await captcha_service.verify(x_captcha_token or "", action="login")
     access_token, refresh_token = await auth_service.login(
         db, login=form_data.username, password=form_data.password
     )
@@ -174,7 +174,7 @@ async def forgot_password(
     Always returns 200 to prevent email enumeration.
     If the account was registered via Google, returns detail='google_auth_user'.
     """
-    await recaptcha_service.verify(body.recaptcha_token or "", action="forgot_password")
+    await captcha_service.verify(body.captcha_token or "", action="forgot_password")
     raw_token = await auth_service.request_password_reset(db, email=str(body.email))
     if raw_token is not None:
         # Load the user again to get the object for the email (request_password_reset
