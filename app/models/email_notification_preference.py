@@ -1,8 +1,9 @@
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, UniqueConstraint  # noqa: F401
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
 from .base import Base
+from .enums import NotificationType, pg_enum
 
 
 class EmailNotificationPreference(Base):
@@ -14,7 +15,10 @@ class EmailNotificationPreference(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    type: Mapped[NotificationType] = mapped_column(
+        pg_enum(NotificationType, name="notification_type"),
+        nullable=False,
+    )
     enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

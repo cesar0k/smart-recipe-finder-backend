@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from .base import Base
+from .enums import NotificationType, pg_enum
 
 
 class Notification(Base):
@@ -14,7 +15,10 @@ class Notification(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    type: Mapped[NotificationType] = mapped_column(
+        pg_enum(NotificationType, name="notification_type"),
+        nullable=False,
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(String(2000), nullable=False)
     is_read: Mapped[bool] = mapped_column(

@@ -9,6 +9,16 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func, text
 
 from .base import Base
+from .enums import (
+    CookingMethod,
+    CostTier,
+    MainProtein,
+    MealType,
+    Occasion,
+    SpiceLevel,
+    TechniqueDifficulty,
+    pg_enum,
+)
 
 if TYPE_CHECKING:
     from .recipe import Recipe
@@ -39,14 +49,30 @@ class RecipeTags(Base):
     gluten_free: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     dairy_free: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
-    # ── Classification enums (stored as String) ───────────────────────────────
-    meal_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    main_protein: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    cooking_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    spice_level: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    occasion: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    cost_tier: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    technique_difficulty: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    # ── Classification (Postgres ENUM-backed) ─────────────────────────────────
+    # cultural_sub_region stays as a free-text String — its value domain is
+    # open-ended (LLM emits names like "Volga region", "Caucasian", ...).
+    meal_type: Mapped[MealType | None] = mapped_column(
+        pg_enum(MealType, name="meal_type"), nullable=True
+    )
+    main_protein: Mapped[MainProtein | None] = mapped_column(
+        pg_enum(MainProtein, name="main_protein"), nullable=True
+    )
+    cooking_method: Mapped[CookingMethod | None] = mapped_column(
+        pg_enum(CookingMethod, name="cooking_method"), nullable=True
+    )
+    spice_level: Mapped[SpiceLevel | None] = mapped_column(
+        pg_enum(SpiceLevel, name="spice_level"), nullable=True
+    )
+    occasion: Mapped[Occasion | None] = mapped_column(
+        pg_enum(Occasion, name="occasion"), nullable=True
+    )
+    cost_tier: Mapped[CostTier | None] = mapped_column(
+        pg_enum(CostTier, name="cost_tier"), nullable=True
+    )
+    technique_difficulty: Mapped[TechniqueDifficulty | None] = mapped_column(
+        pg_enum(TechniqueDifficulty, name="technique_difficulty"), nullable=True
+    )
     cultural_sub_region: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # ── Allergens (multi-value) ───────────────────────────────────────────────

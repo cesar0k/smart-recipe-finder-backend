@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import text
 
 from .base import Base
+from .enums import RecipeDifficulty, RecipeStatus, pg_enum
 
 if TYPE_CHECKING:
     from .recipe_tags import RecipeTags
@@ -22,7 +23,10 @@ class Recipe(Base):
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     instructions: Mapped[str] = mapped_column(String(50000), nullable=False)
     cooking_time_in_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
-    difficulty: Mapped[str] = mapped_column(String(50), nullable=False)
+    difficulty: Mapped[RecipeDifficulty] = mapped_column(
+        pg_enum(RecipeDifficulty, name="recipe_difficulty"),
+        nullable=False,
+    )
     cuisine: Mapped[str | None] = mapped_column(String(50), nullable=True)
     ingredients: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=[], nullable=False)
     image_urls: Mapped[list[str]] = mapped_column(
@@ -34,8 +38,11 @@ class Recipe(Base):
     owner_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    status: Mapped[str] = mapped_column(
-        String(20), default="approved", server_default=text("'approved'"), nullable=False
+    status: Mapped[RecipeStatus] = mapped_column(
+        pg_enum(RecipeStatus, name="recipe_status"),
+        default=RecipeStatus.APPROVED,
+        server_default=text("'approved'"),
+        nullable=False,
     )
     rejection_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     favorites_count: Mapped[int] = mapped_column(
