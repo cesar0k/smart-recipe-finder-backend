@@ -27,8 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.cache import close_redis, get_cache, init_redis
 from app.core.vector_store import VectorStore
 from app.db.session import AsyncSessionLocal
-from app.services import recipe_service
-from app.services.search_cache import bump_search_version
+from app.services.recipe import recipe_service
+from app.services.recipe.search_cache import bump_search_version
 
 matplotlib.use("Agg")
 

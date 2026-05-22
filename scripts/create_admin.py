@@ -23,8 +23,8 @@ from sqlalchemy.future import select
 
 from app.core.security import hash_password
 from app.db.session import AsyncSessionLocal
-from app.models.user import User
-from app.services.user_service import get_user_by_email, get_user_by_username
+from app.models.auth.user import User
+from app.services.social.user_service import get_user_by_email, get_user_by_username
 
 
 async def create_admin(email: str, username: str, password: str) -> None:

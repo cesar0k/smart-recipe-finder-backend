@@ -12,10 +12,11 @@ from app.api.deps import get_current_user, get_current_user_optional, require_ad
 from app.core.cache import Cache, get_cache
 from app.core.exceptions import ValidationError
 from app.db.session import get_db
-from app.models.email_notification_preference import EmailNotificationPreference
-from app.models.user import User
-from app.services import auth_service, email_service, user_service
-
+from app.models.notification.email_notification_preference import EmailNotificationPreference
+from app.models.auth.user import User
+from app.services.auth import auth_service
+from app.services.notification import email_service
+from app.services.social import user_service
 logger = logging.getLogger(__name__)
 router = APIRouter()
 

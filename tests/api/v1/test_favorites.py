@@ -10,7 +10,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.config import settings
-from app.models.recipe import Recipe
+from app.models.recipe.recipe import Recipe
 
 BASE_RECIPE: dict[str, Any] = {
     "title": "Favoritable Recipe",

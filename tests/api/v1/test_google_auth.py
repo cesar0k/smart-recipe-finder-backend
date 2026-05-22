@@ -17,9 +17,8 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
-from app.services import google_auth_service, user_service
-
-
+from app.services.auth import google_auth_service
+from app.services.social import user_service
 def _png_bytes(size: int = 64) -> bytes:
     """Produce a small valid PNG so libmagic recognises image/png."""
     buf = BytesIO()
@@ -101,7 +100,7 @@ async def test_set_avatar_from_remote_url_persists_to_s3(
     )
     monkeypatch.setattr(user_service.s3_client, "upload_file", _fake_upload)
 
-    from app.models.user import User
+    from app.models.auth.user import User
 
     user = User(
         email="bg-target@example.com",
@@ -157,7 +156,7 @@ async def test_set_avatar_from_remote_url_swallows_download_failure(
     )
     monkeypatch.setattr(user_service.s3_client, "upload_file", _fake_upload)
 
-    from app.models.user import User
+    from app.models.auth.user import User
 
     user = User(
         email="bg-failure@example.com",

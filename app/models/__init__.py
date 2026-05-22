@@ -1,21 +1,25 @@
-from .base import Base
-from .cuisine import Cuisine
-from .email_notification_preference import EmailNotificationPreference
-from .ingredient import Ingredient
-from .moderation_log import ModerationLog
-from .user_follow import UserFollow
-from .notification import Notification
-from .recipe import Recipe
-from .recipe_comment import RecipeComment
-from .recipe_comment_report import RecipeCommentReport
-from .recipe_draft import RecipeDraft
-from .recipe_favorite import RecipeFavorite
-from .recipe_image import RecipeImage
-from .recipe_ingredient import RecipeIngredient
-from .recipe_rating import RecipeRating
-from .recipe_tags import RecipeTags
-from .refresh_token import RefreshToken
-from .user import User
+"""Facade — re-exports each ORM class. Inside the codebase prefer the full
+path (``from app.models.recipe.recipe import Recipe``) to keep the domain
+visible at the call site."""
+
+from app.models._base.base import Base
+from app.models.auth.refresh_token import RefreshToken
+from app.models.auth.user import User
+from app.models.comment.recipe_comment import RecipeComment
+from app.models.comment.recipe_comment_report import RecipeCommentReport
+from app.models.moderation.moderation_log import ModerationLog
+from app.models.notification.email_notification_preference import EmailNotificationPreference
+from app.models.notification.notification import Notification
+from app.models.recipe.cuisine import Cuisine
+from app.models.recipe.ingredient import Ingredient
+from app.models.recipe.recipe import Recipe
+from app.models.recipe.recipe_draft import RecipeDraft
+from app.models.recipe.recipe_favorite import RecipeFavorite
+from app.models.recipe.recipe_image import RecipeImage
+from app.models.recipe.recipe_ingredient import RecipeIngredient
+from app.models.recipe.recipe_rating import RecipeRating
+from app.models.recipe.recipe_tags import RecipeTags
+from app.models.social.user_follow import UserFollow
 
 __all__ = [
     "Base",
@@ -23,7 +27,6 @@ __all__ = [
     "EmailNotificationPreference",
     "Ingredient",
     "ModerationLog",
-    "UserFollow",
     "Notification",
     "Recipe",
     "RecipeComment",
@@ -36,4 +39,5 @@ __all__ = [
     "RecipeTags",
     "RefreshToken",
     "User",
+    "UserFollow",
 ]

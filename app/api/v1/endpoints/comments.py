@@ -7,9 +7,8 @@ from app import schemas
 from app.api.deps import get_current_user, get_current_user_optional
 from app.core.cache import Cache, get_cache
 from app.db.session import get_db
-from app.models.user import User
-from app.services import comment_service
-
+from app.models.auth.user import User
+from app.services.comment import comment_service
 router = APIRouter()
 
 
