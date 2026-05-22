@@ -18,6 +18,8 @@ class Recipe(RecipeBase):
     thumbnail_urls: list[str] = Field(default_factory=list)
     owner_id: int | None = None
     owner_username: str | None = None
+    owner_display_name: str | None = None
+    owner_avatar_url: str | None = None
     status: str = "approved"
     rejection_reason: str | None = None
     has_pending_draft: bool = False
