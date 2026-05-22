@@ -7,8 +7,8 @@ from typing import Any
 from typing import cast as t_cast
 
 from fastapi import UploadFile
-from sqlalchemy import String, distinct, func, not_, or_
-from sqlalchemy import cast as sa_cast
+from sqlalchemy import String, distinct, func, not_, or_  # noqa: F401
+from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -44,13 +44,163 @@ __all__ = [
 
 
 def _with_owner(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
-    """Add selectinload for owner relationship."""
-    return query.options(selectinload(Recipe.owner))
+    """Eager-load the relationships the Pydantic Recipe schema needs to
+    serialize: owner, cuisine, images, ingredients (with their joined
+    Ingredient). Without these the ORM properties would raise from
+    lazy="raise"/"noload"."""
+    from app.models.recipe_ingredient import RecipeIngredient
+
+    return query.options(
+        selectinload(Recipe.owner),
+        selectinload(Recipe.cuisine_ref),
+        selectinload(Recipe.images),
+        selectinload(Recipe.recipe_ingredients).selectinload(
+            RecipeIngredient.ingredient
+        ),
+    )
 
 
 def _with_relations(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
-    """Add selectinload for owner + tags relationships."""
-    return query.options(selectinload(Recipe.owner), selectinload(Recipe.tags))
+    """_with_owner + tags."""
+    from app.models.recipe_ingredient import RecipeIngredient
+
+    return query.options(
+        selectinload(Recipe.owner),
+        selectinload(Recipe.tags),
+        selectinload(Recipe.cuisine_ref),
+        selectinload(Recipe.images),
+        selectinload(Recipe.recipe_ingredients).selectinload(
+            RecipeIngredient.ingredient
+        ),
+    )
+
+
+async def _set_recipe_ingredients(
+    db: AsyncSession, recipe: Recipe, names: list[str]
+) -> None:
+    """Replace recipe.recipe_ingredients so that, after the call, it matches
+    *names* exactly (in given order).
+
+    `names` come straight from the request (list of strings, no amount/unit
+    today). We normalise each name, find-or-create the Ingredient row and
+    rebuild the M2M with fresh positions.
+    """
+    from app.models.recipe_ingredient import RecipeIngredient
+    from app.services import ingredient_service
+
+    # Wipe previous rows for this recipe — cheap, and avoids the dance of
+    # diffing existing vs new for amount/unit (none of which we currently
+    # surface in the API).
+    await db.execute(
+        sa_delete(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id)
+    )
+
+    ingredients_map = await ingredient_service.get_or_create_many(db, names=names)
+
+    seen: set[int] = set()
+    for idx, raw_name in enumerate(names):
+        canonical = raw_name.strip().lower()
+        if not canonical:
+            continue
+        ing = ingredients_map.get(canonical)
+        if ing is None or ing.id in seen:
+            # No row (empty name) or duplicate in the same payload — skip.
+            continue
+        seen.add(ing.id)
+        db.add(
+            RecipeIngredient(
+                recipe_id=recipe.id,
+                ingredient_id=ing.id,
+                position=idx,
+            )
+        )
+
+
+async def _ensure_ingredients_loaded(db: AsyncSession, recipe: Recipe) -> None:
+    """Eager-load recipe_ingredients AND their .ingredient so the
+    Recipe.ingredients property doesn't see lazy="raise"."""
+    await db.refresh(recipe, attribute_names=["recipe_ingredients"])
+    for ri in recipe.recipe_ingredients:
+        await db.refresh(ri, attribute_names=["ingredient"])
+
+
+async def _ensure_images_loaded(db: AsyncSession, recipe: Recipe) -> None:
+    """Eager-load Recipe.images so the image_urls / thumbnail_urls properties
+    don't return an empty list after a fresh insert/refresh."""
+    await db.refresh(recipe, attribute_names=["images"])
+
+
+async def _add_recipe_images(
+    db: AsyncSession, recipe: Recipe, pairs: list[tuple[str, str]]
+) -> None:
+    """Append (full_url, thumb_url) pairs to recipe.images, continuing the
+    existing positions. Caller is responsible for committing."""
+    from app.models.recipe_image import RecipeImage
+
+    res = await db.execute(
+        select(func.coalesce(func.max(RecipeImage.position), -1)).where(
+            RecipeImage.recipe_id == recipe.id
+        )
+    )
+    next_pos = (res.scalar_one() or -1) + 1
+    for full_url, thumb_url in pairs:
+        db.add(
+            RecipeImage(
+                recipe_id=recipe.id,
+                full_url=full_url,
+                thumbnail_url=thumb_url,
+                position=next_pos,
+            )
+        )
+        next_pos += 1
+
+
+async def _set_recipe_images(
+    db: AsyncSession, recipe: Recipe, new_full_urls: list[str]
+) -> None:
+    """Replace recipe.images so that, after the call, the relationship matches
+    new_full_urls *exactly*:
+      - rows whose full_url is in new_full_urls survive (keeping their thumb)
+      - rows whose full_url is absent are deleted (and their S3 objects too)
+      - position is rewritten to match the order of new_full_urls.
+    """
+    from app.models.recipe_image import RecipeImage
+
+    existing_res = await db.execute(
+        select(RecipeImage).where(RecipeImage.recipe_id == recipe.id)
+    )
+    existing = {img.full_url: img for img in existing_res.scalars().all()}
+
+    new_set = set(new_full_urls)
+    for full_url, img in existing.items():
+        if full_url not in new_set:
+            await s3_client.delete_image_from_s3(full_url)
+            await s3_client.delete_image_from_s3(_derive_thumb_url(full_url))
+            await db.delete(img)
+
+    for idx, full_url in enumerate(new_full_urls):
+        if full_url in existing:
+            existing[full_url].position = idx
+            db.add(existing[full_url])
+        else:
+            # No matching existing row — derive thumbnail from URL pattern.
+            db.add(
+                RecipeImage(
+                    recipe_id=recipe.id,
+                    full_url=full_url,
+                    thumbnail_url=_derive_thumb_url(full_url),
+                    position=idx,
+                )
+            )
+
+
+async def _ensure_cuisine_loaded(db: AsyncSession, recipe: Recipe) -> None:
+    """After a refresh, eager-load Recipe.cuisine_ref if the FK is set but the
+    relationship attribute hasn't been populated yet. Cheap no-op when not
+    needed."""
+    if recipe.cuisine_id is None:
+        return
+    await db.refresh(recipe, attribute_names=["cuisine_ref"])
 
 
 async def _reload_recipe(db: AsyncSession, recipe_id: int) -> Recipe | None:
@@ -335,36 +485,53 @@ def _apply_filters(
 ) -> Select[tuple[Recipe]]:
     """
     Apply all filters: ingredients, cooking time, difficulty, cuisine.
-    """
-    json_as_text = sa_cast(Recipe.ingredients, String)
 
-    # Include ingredients
+    Ingredient filters now go through the normalised
+    ``recipe_ingredients`` ↔ ``ingredients`` join (instead of the old JSONB
+    regex). The behaviour is preserved: a hit on any morphological form of
+    a query term counts, and "include foo, bar" means the recipe must match
+    both foo AND bar.
+    """
+    from app.models.ingredient import Ingredient
+    from app.models.recipe_ingredient import RecipeIngredient
+
+    def _ingredient_name_matches_any(terms: list[str]):
+        # OR-list of case-insensitive ``\yterm\y`` regex matches against
+        # ingredients.name. Postgres' POSIX regex (`~*`) supports `\y` word
+        # boundaries.
+        clauses = []
+        for term in terms:
+            safe = re.escape(term)
+            clauses.append(Ingredient.name.op("~*")(f"\\y{safe}\\y"))
+        return or_(*clauses)
+
+    # Include ingredients: per item, recipe must have at least one ingredient
+    # matching that item's word-forms.
     if include_str:
         raw_items = [i.strip() for i in include_str.split(",") if i.strip()]
         for item in raw_items:
             terms = get_word_forms(item)
+            subq = (
+                select(RecipeIngredient.recipe_id)
+                .join(Ingredient, Ingredient.id == RecipeIngredient.ingredient_id)
+                .where(_ingredient_name_matches_any(terms))
+            )
+            query = query.where(Recipe.id.in_(subq))
 
-            term_conditions = []
-            for term in terms:
-                safe_term = re.escape(term)
-                pattern = f"\\y{safe_term}\\y"
-                term_conditions.append(json_as_text.op("~*")(pattern))
-
-            query = query.where(or_(*term_conditions))
-
-    # Exclude ingredients
+    # Exclude ingredients: recipe must NOT have any ingredient that matches
+    # any of the word-forms for any of the excluded items.
     if exclude_str:
         raw_items = [i.strip() for i in exclude_str.split(",") if i.strip()]
-        exclude_conditions = []
+        all_terms: list[str] = []
         for item in raw_items:
-            terms = get_word_forms(item)
-            for term in terms:
-                safe_term = re.escape(term)
-                pattern = f"\\y{safe_term}\\y"
-                exclude_conditions.append(json_as_text.op("~*")(pattern))
-
-        if exclude_conditions:
-            query = query.where(not_(or_(*exclude_conditions)))
+            all_terms.extend(get_word_forms(item))
+        if all_terms:
+            subq = (
+                select(RecipeIngredient.recipe_id)
+                .join(Ingredient, Ingredient.id == RecipeIngredient.ingredient_id)
+                .where(_ingredient_name_matches_any(all_terms))
+            )
+            query = query.where(not_(Recipe.id.in_(subq)))
 
     # Cooking time range
     if min_time is not None:
@@ -378,23 +545,30 @@ def _apply_filters(
         if difficulties:
             query = query.where(func.lower(Recipe.difficulty).in_(difficulties))
 
-    # Cuisine multi-select (comma-separated, case-insensitive)
+    # Cuisine multi-select (comma-separated, case-insensitive).
+    # Joins to the cuisines reference table and filters by name.
     if cuisine:
         cuisines = [c.strip().lower() for c in cuisine.split(",") if c.strip()]
         if cuisines:
-            query = query.where(func.lower(Recipe.cuisine).in_(cuisines))
+            from app.models.cuisine import Cuisine
+
+            query = query.join(Cuisine, Recipe.cuisine_id == Cuisine.id).where(
+                func.lower(Cuisine.name).in_(cuisines)
+            )
 
     return query
 
 
 async def get_distinct_cuisines(db: AsyncSession) -> list[str]:
-    """Return sorted list of distinct cuisine values from approved recipes."""
+    """Return sorted list of distinct cuisine names that are actually used by
+    at least one approved recipe."""
+    from app.models.cuisine import Cuisine
+
     result = await db.execute(
-        select(distinct(Recipe.cuisine))
+        select(distinct(Cuisine.name))
+        .join(Recipe, Recipe.cuisine_id == Cuisine.id)
         .where(Recipe.status == "approved")
-        .where(Recipe.cuisine.isnot(None))
-        .where(Recipe.cuisine != "")
-        .order_by(Recipe.cuisine)
+        .order_by(Cuisine.name)
     )
     return [row[0] for row in result.all()]
 
@@ -498,22 +672,36 @@ async def create_recipe(
     current_user: User,
     cache: Cache | None = None,
 ) -> Recipe:
-    recipe_data = recipe_in.model_dump(exclude={"ingredients"})
-    json_ingredients = [{"name": name} for name in recipe_in.ingredients]
+    # image_urls/thumbnail_urls are excluded — the relationship is populated
+    # via upload_recipe_images() after the recipe is created. cuisine is
+    # converted to a FK via cuisine_service below.
+    recipe_data = recipe_in.model_dump(
+        exclude={"ingredients", "cuisine", "image_urls", "thumbnail_urls"}
+    )
 
     # Moderators and admins get auto-approved, regular users go to pending
     status = "approved" if current_user.role in ("moderator", "admin") else "pending"
 
+    # Normalise the free-form cuisine into a FK to the cuisines reference table.
+    from app.services import cuisine_service
+
+    cuisine_obj = await cuisine_service.get_or_create_by_name(db, name=recipe_in.cuisine)
+
     db_recipe = Recipe(
         **recipe_data,
-        ingredients=json_ingredients,
         owner_id=current_user.id,
         status=status,
+        cuisine_id=cuisine_obj.id if cuisine_obj else None,
     )
 
     db.add(db_recipe)
+    await db.flush()  # need an id before we can attach the M2M rows
+    await _set_recipe_ingredients(db, db_recipe, list(recipe_in.ingredients))
     await db.commit()
     await db.refresh(db_recipe)
+    await _ensure_cuisine_loaded(db, db_recipe)
+    await _ensure_images_loaded(db, db_recipe)
+    await _ensure_ingredients_loaded(db, db_recipe)
 
     if db_recipe.status == "approved":
         text, meta = _create_semantic_document(db_recipe)
@@ -825,45 +1013,36 @@ async def _update_recipe_directly(
 
     if "image_urls" in update_data:
         raw_urls = update_data.pop("image_urls")
+        new_urls_list: list[str] = (
+            [str(url) for url in raw_urls] if raw_urls else []
+        )
+        # Apply via the normalised recipe_images table — keeps the survivors,
+        # drops the removed ones (and their S3 objects), reorders by the new
+        # client-supplied sequence.
+        await _set_recipe_images(db, db_recipe, new_urls_list)
 
-        if raw_urls is None:
-            new_urls_list: list[str] = []
-        else:
-            new_urls_list = [str(url) for url in raw_urls]
-
-        current_urls = set(db_recipe.image_urls) if db_recipe.image_urls else set()
-        new_urls = set(new_urls_list)
-        urls_to_delete = current_urls - new_urls
-
-        db_recipe.image_urls = new_urls_list
-
-        # Sync thumbnail_urls: keep only thumbs for remaining images, in same order
-        current_thumbs = list(db_recipe.thumbnail_urls) if db_recipe.thumbnail_urls else []
-        old_url_list = list(db_recipe.image_urls) if db_recipe.image_urls else []
-        # Build a mapping from full URL → thumb URL using position
-        url_to_thumb = {}
-        for i, u in enumerate(old_url_list):
-            if i < len(current_thumbs):
-                url_to_thumb[u] = current_thumbs[i]
-        # Reorder thumbnails to match new image_urls order
-        new_thumbs = [url_to_thumb[u] for u in new_urls_list if u in url_to_thumb]
-        db_recipe.thumbnail_urls = new_thumbs
-
-        for url in urls_to_delete:
-            await s3_client.delete_image_from_s3(url)
-            await s3_client.delete_image_from_s3(_derive_thumb_url(url))
-
+    new_ingredient_names: list[str] | None = None
     if "ingredients" in update_data:
-        raw_ingredients = update_data.pop("ingredients")
-        json_ingredients = [{"name": i} for i in raw_ingredients]
-        db_recipe.ingredients = json_ingredients
+        new_ingredient_names = list(update_data.pop("ingredients"))
+
+    if "cuisine" in update_data:
+        from app.services import cuisine_service
+
+        new_cuisine_name = update_data.pop("cuisine")
+        cuisine_obj = await cuisine_service.get_or_create_by_name(db, name=new_cuisine_name)
+        db_recipe.cuisine_id = cuisine_obj.id if cuisine_obj else None
 
     for field, value in update_data.items():
         setattr(db_recipe, field, value)
 
     db.add(db_recipe)
+    if new_ingredient_names is not None:
+        await _set_recipe_ingredients(db, db_recipe, new_ingredient_names)
     await db.commit()
     await db.refresh(db_recipe)
+    await _ensure_cuisine_loaded(db, db_recipe)
+    await _ensure_images_loaded(db, db_recipe)
+    await _ensure_ingredients_loaded(db, db_recipe)
 
     # Re-index if approved
     if db_recipe.status == "approved":
@@ -950,9 +1129,17 @@ async def resubmit_recipe(
     # Exclude image_urls — managed separately
     update_data.pop("image_urls", None)
 
+    new_ingredient_names: list[str] | None = None
     if "ingredients" in update_data:
-        raw_ingredients = update_data.pop("ingredients")
-        db_recipe.ingredients = [{"name": i} for i in raw_ingredients]
+        new_ingredient_names = list(update_data.pop("ingredients"))
+
+    if "cuisine" in update_data:
+        from app.services import cuisine_service
+
+        cuisine_obj = await cuisine_service.get_or_create_by_name(
+            db, name=update_data.pop("cuisine")
+        )
+        db_recipe.cuisine_id = cuisine_obj.id if cuisine_obj else None
 
     for field, value in update_data.items():
         setattr(db_recipe, field, value)
@@ -961,8 +1148,13 @@ async def resubmit_recipe(
     db_recipe.rejection_reason = None
 
     db.add(db_recipe)
+    if new_ingredient_names is not None:
+        await _set_recipe_ingredients(db, db_recipe, new_ingredient_names)
     await db.commit()
     await db.refresh(db_recipe)
+    await _ensure_cuisine_loaded(db, db_recipe)
+    await _ensure_images_loaded(db, db_recipe)
+    await _ensure_ingredients_loaded(db, db_recipe)
 
     # Notify moderators about re-submitted recipe
     from app.services import notification_service
@@ -1067,23 +1259,13 @@ async def delete_recipe_images(
     if not urls_to_process:
         return db_recipe
 
-    remaining_urls = list(current_urls - urls_to_process)
-    db_recipe.image_urls = remaining_urls
-
-    # Also remove corresponding thumbnails
-    current_thumbs = list(db_recipe.thumbnail_urls) if db_recipe.thumbnail_urls else []
-    thumb_urls_to_delete = {_derive_thumb_url(url) for url in urls_to_process}
-    remaining_thumbs = [t for t in current_thumbs if t not in thumb_urls_to_delete]
-    db_recipe.thumbnail_urls = remaining_thumbs
-
-    db.add(db_recipe)
+    remaining_urls = [u for u in db_recipe.image_urls if u not in urls_to_process]
+    # _set_recipe_images keeps the survivors in the supplied order and removes
+    # both the DB rows and the S3 objects for the dropped URLs.
+    await _set_recipe_images(db, db_recipe, remaining_urls)
     await db.commit()
     await db.refresh(db_recipe)
-
-    # Delete from S3: full images + their thumbnails
-    for url in urls_to_process:
-        await s3_client.delete_image_from_s3(url)
-        await s3_client.delete_image_from_s3(_derive_thumb_url(url))
+    await _ensure_images_loaded(db, db_recipe)
 
     if cache is not None:
         await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
@@ -1127,14 +1309,10 @@ async def upload_recipe_images(
 
     results = await asyncio.gather(*[_process_file(f) for f in files])
 
-    current_urls = list(db_recipe.image_urls) if db_recipe.image_urls else []
-    current_thumbs = list(db_recipe.thumbnail_urls) if db_recipe.thumbnail_urls else []
-    db_recipe.image_urls = current_urls + [r[0] for r in results]
-    db_recipe.thumbnail_urls = current_thumbs + [r[1] for r in results]
-
-    db.add(db_recipe)
+    await _add_recipe_images(db, db_recipe, results)
     await db.commit()
     await db.refresh(db_recipe)
+    await _ensure_images_loaded(db, db_recipe)
 
     if cache is not None:
         await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)

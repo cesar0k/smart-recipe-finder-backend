@@ -163,8 +163,10 @@ docker compose exec app python scripts/seed_db.py --lang ru  # or --lang en
 docker compose exec app pytest             # all tests
 docker compose exec app pytest -m smoke    # fast sanity checks (~30 s)
 docker compose exec app pytest -m crud     # full CRUD + edge cases
-docker compose exec app pytest -m eval     # search quality evaluation
 ```
+
+Search-quality evaluation lives outside the pytest suite — see
+`scripts/evaluate.py` below.
 
 Tests use an isolated `recipes_test_db` PostgreSQL database and `recipes_test_collection` ChromaDB collection, both torn down after the session.
 

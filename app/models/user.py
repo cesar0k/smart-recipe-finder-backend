@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func, text
 
 from .base import Base
+from .enums import AuthProvider, UserLanguage, UserRole, pg_enum
 
 
 class User(Base):
@@ -20,10 +21,17 @@ class User(Base):
     display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    auth_provider: Mapped[str] = mapped_column(
-        String(20), default="local", server_default="local", nullable=False
+    auth_provider: Mapped[AuthProvider] = mapped_column(
+        pg_enum(AuthProvider, name="auth_provider"),
+        default=AuthProvider.LOCAL,
+        server_default=AuthProvider.LOCAL.value,
+        nullable=False,
     )
-    role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        pg_enum(UserRole, name="user_role"),
+        default=UserRole.USER,
+        nullable=False,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now()
@@ -58,6 +66,9 @@ class User(Base):
     )
 
     # UI / email language preference: "ru" or "en"
-    language: Mapped[str] = mapped_column(
-        String(5), server_default=text("'ru'"), nullable=False, default="ru"
+    language: Mapped[UserLanguage] = mapped_column(
+        pg_enum(UserLanguage, name="user_language"),
+        server_default=text("'ru'"),
+        nullable=False,
+        default=UserLanguage.RU,
     )

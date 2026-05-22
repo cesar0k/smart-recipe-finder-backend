@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Float, ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import text
 
 from .base import Base
+from .enums import RecipeDifficulty, RecipeStatus, pg_enum
 
 if TYPE_CHECKING:
+    from .cuisine import Cuisine
+    from .recipe_image import RecipeImage
+    from .recipe_ingredient import RecipeIngredient
     from .recipe_tags import RecipeTags
     from .user import User
 
@@ -22,20 +25,21 @@ class Recipe(Base):
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     instructions: Mapped[str] = mapped_column(String(50000), nullable=False)
     cooking_time_in_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
-    difficulty: Mapped[str] = mapped_column(String(50), nullable=False)
-    cuisine: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    ingredients: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=[], nullable=False)
-    image_urls: Mapped[list[str]] = mapped_column(
-        ARRAY(String), default=list, server_default=text("'{}'"), nullable=False
+    difficulty: Mapped[RecipeDifficulty] = mapped_column(
+        pg_enum(RecipeDifficulty, name="recipe_difficulty"),
+        nullable=False,
     )
-    thumbnail_urls: Mapped[list[str]] = mapped_column(
-        ARRAY(String), default=list, server_default=text("'{}'"), nullable=False
+    cuisine_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("cuisines.id", ondelete="SET NULL"), nullable=True, index=True
     )
     owner_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    status: Mapped[str] = mapped_column(
-        String(20), default="approved", server_default=text("'approved'"), nullable=False
+    status: Mapped[RecipeStatus] = mapped_column(
+        pg_enum(RecipeStatus, name="recipe_status"),
+        default=RecipeStatus.APPROVED,
+        server_default=text("'approved'"),
+        nullable=False,
     )
     rejection_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     favorites_count: Mapped[int] = mapped_column(
@@ -59,6 +63,11 @@ class Recipe(Base):
     # Relationship to User (lazy="raise" — must explicitly load via selectinload)
     owner: Mapped[User | None] = relationship("User", lazy="raise")
 
+    # Relationship to Cuisine — small reference table; lazy="raise" so callers
+    # explicitly opt into the join (we keep it as a separate query in most
+    # places to stay friendly to the existing selectinload patterns).
+    cuisine_ref: Mapped[Cuisine | None] = relationship("Cuisine", lazy="raise")
+
     # Relationship to RecipeTags — 1:1, NULL until background task completes.
     # lazy="noload": never auto-load (prevents N+1), returns None if not selectinloaded.
     # passive_deletes=True + cascade="all, delete-orphan" lets the DB's ON DELETE
@@ -71,6 +80,70 @@ class Recipe(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    # Recipe images — normalised one-row-per-image. position is the display
+    # order (matches the old ARRAY index). cascade deletes the rows when the
+    # recipe is deleted; passive_deletes defers to the DB's ON DELETE CASCADE.
+    images: Mapped[list[RecipeImage]] = relationship(
+        "RecipeImage",
+        order_by="RecipeImage.position",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="noload",
+    )
+
+    # Ingredients via the M2M RecipeIngredient table. order matches the old
+    # JSONB array order via RecipeIngredient.position. lazy="noload" so we
+    # don't accidentally trigger an N+1; consumers must selectinload it.
+    recipe_ingredients: Mapped[list[RecipeIngredient]] = relationship(
+        "RecipeIngredient",
+        order_by="RecipeIngredient.position",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="noload",
+    )
+
+    @property
+    def ingredients(self) -> list[dict[str, str | None]]:
+        """Pydantic-compatible accessor — list of ``{name, amount, unit}`` dicts
+        in display order. Requires ``recipe_ingredients`` AND
+        ``recipe_ingredients.ingredient`` to be eager-loaded."""
+        try:
+            return [
+                {
+                    "name": ri.ingredient.name,
+                    "amount": ri.amount,
+                    "unit": ri.unit,
+                }
+                for ri in self.recipe_ingredients
+            ]
+        except Exception:
+            return []
+
+    @property
+    def image_urls(self) -> list[str]:
+        """Pydantic-compatible accessor — flat list of full-size URLs in order.
+        Requires the ``images`` relationship to be selectinloaded."""
+        try:
+            return [img.full_url for img in self.images]
+        except Exception:
+            return []
+
+    @property
+    def thumbnail_urls(self) -> list[str]:
+        try:
+            return [img.thumbnail_url for img in self.images]
+        except Exception:
+            return []
+
+    @property
+    def cuisine(self) -> str | None:
+        """Pydantic-friendly accessor: returns the cuisine *name* (or None).
+        Requires the ``cuisine_ref`` relationship to be selectinloaded."""
+        try:
+            return self.cuisine_ref.name if self.cuisine_ref else None
+        except Exception:
+            return None
 
     @property
     def owner_username(self) -> str | None:

@@ -139,8 +139,10 @@ async def seed(lang: str) -> None:
             if has_photos_dir and json_id is not None:
                 uploaded_urls = await upload_local_photos(db_recipe.id, json_id)
                 if uploaded_urls:
-                    db_recipe.image_urls = uploaded_urls
-                    db.add(db_recipe)
+                    # Seed data doesn't ship thumbnails — reuse the full URL
+                    # as the thumbnail so the NOT NULL column is satisfied.
+                    pairs = [(u, u) for u in uploaded_urls]
+                    await recipe_service._add_recipe_images(db, db_recipe, pairs)
                     await db.commit()
                     print(f'   Uploaded {len(uploaded_urls)} photo(s) for "{db_recipe.title}"')
 
