@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # Rate limits applied via slowapi. Per IP.
     RATE_LIMIT_DEFAULT: str = "120/minute"   # blanket limit on /api/v1/*
     RATE_LIMIT_AUTH: str = "10/minute"       # login / register / password-reset / verify-email
+    RATE_LIMIT_SEARCH: str = "30/minute"     # vector search — expensive (embeddings)
 
     SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
