@@ -25,7 +25,7 @@ class TestingSettings(Settings):
             "avg_f1_score": 0.17,
             "avg_latency": 2000,           # parse_query_intent adds ~0.5-1s per query
         },
-        "JSONB GIN Filter": {"accuracy": 90.0, "avg_latency": 15},
+        "Ingredient Filter": {"accuracy": 90.0, "avg_latency": 15},
     }
 
     @property

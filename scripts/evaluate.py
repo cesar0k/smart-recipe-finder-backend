@@ -16,18 +16,16 @@ import sys
 import time
 from pathlib import Path
 from statistics import mean
-from typing import Any, Callable, Sequence
+from typing import Any, Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
 from alembic.config import Config
-from sqlalchemy import String, cast, not_, or_
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.future import select
 from sqlalchemy_utils import create_database, database_exists, drop_database
 
 from alembic import command
@@ -37,10 +35,8 @@ sys.path.append(os.getcwd())
 
 import matplotlib
 
-from app.core import text_utils
 from app.core.security import hash_password
 from app.core.vector_store import VectorStore
-from app.models.recipe import Recipe
 from app.models.user import User
 from app.schemas import RecipeCreate
 from app.services import recipe_service
@@ -111,42 +107,6 @@ async def seed_eval_data(session: AsyncSession, recipes_path: Path) -> None:
         await recipe_service.create_recipe(
             db=session, recipe_in=recipe_in, current_user=admin_user
         )
-
-
-async def slow_smart_jsonb_filter(
-    db: AsyncSession,
-    *,
-    skip: int = 0,
-    limit: int = 100,
-    include_str: str | None = None,
-    exclude_str: str | None = None,
-) -> Sequence[Recipe]:
-    query = select(Recipe)
-
-    json_as_text = cast(Recipe.ingredients, String)
-
-    if include_str:
-        raw_items = [i.strip() for i in include_str.split(",") if i.strip()]
-        for item in raw_items:
-            terms = text_utils.get_word_forms(item)
-
-            term_conditions = [json_as_text.op("~*")(f"\\y{term}\\y") for term in terms]
-            query = query.where(or_(*term_conditions))
-
-    if exclude_str:
-        raw_items = [i.strip() for i in exclude_str.split(",") if i.strip()]
-        exclude_conditions = []
-        for item in raw_items:
-            terms = text_utils.get_word_forms(item)
-            for term in terms:
-                exclude_conditions.append(json_as_text.op("~*")(f"\\y{term}\\y"))
-
-        if exclude_conditions:
-            query = query.where(not_(or_(*exclude_conditions)))
-
-    query = query.offset(skip).limit(limit)
-    result = await db.execute(query)
-    return result.scalars().unique().all()
 
 
 async def evaluate_nls_method(
@@ -535,23 +495,20 @@ async def main() -> None:
             if not check_quality_gates("Vector Search", vec_res):
                 success = False
 
-            jsonb_fast_smart_fil_res = await evaluate_filters(
+            # The ingredient filter now goes through the normalised
+            # recipe_ingredients ↔ ingredients join (see recipe_service).
+            # Previously this slot held a "JSONB GIN Filter" baseline; with
+            # ingredients no longer stored as JSONB on Recipe, the old
+            # benchmark is gone.
+            ingredient_fil_res = await evaluate_filters(
                 db,
-                "JSONB GIN Filter",
+                "Ingredient Filter",
                 recipe_service.get_all_recipes,
                 filter_queries,
             )
-            filter_results.append(jsonb_fast_smart_fil_res)
-            if not check_quality_gates("JSONB GIN Filter", jsonb_fast_smart_fil_res):
+            filter_results.append(ingredient_fil_res)
+            if not check_quality_gates("Ingredient Filter", ingredient_fil_res):
                 success = False
-
-            jsonb_slow_smart_fil_res = await evaluate_filters(
-                db,
-                "Slow JSONB Accurate Word Boundary Filter",
-                slow_smart_jsonb_filter,
-                filter_queries,
-            )
-            filter_results.append(jsonb_slow_smart_fil_res)
 
             plot_evaluation_results(nls_results, filter_results)
     finally:
