@@ -7,9 +7,10 @@ from app import schemas
 from app.api.deps import require_moderator
 from app.core.cache import Cache, get_cache
 from app.db.session import get_db
-from app.models.user import User
-from app.services import comment_service, moderation_log_service, moderation_service
-
+from app.models.auth.user import User
+from app.services.comment import comment_service
+from app.services.moderation import moderation_log_service
+from app.services.moderation import moderation_service
 router = APIRouter()
 
 

@@ -12,10 +12,12 @@ from app.core.config import settings
 from app.core.exceptions import InvalidCredentialsError
 from app.core.rate_limit import limiter
 from app.db.session import get_db
-from app.models.user import User
-from app.services import auth_service, captcha_service, email_service
-from app.services.auth_service import DeactivatedUserError
-from app.services.google_auth_service import (
+from app.models.auth.user import User
+from app.services.auth import auth_service
+from app.services.auth import captcha_service
+from app.services.notification import email_service
+from app.services.auth.auth_service import DeactivatedUserError
+from app.services.auth.google_auth_service import (
     GoogleAuthError,
     authenticate_or_create_google_user,
     exchange_code_for_user_info,
@@ -198,7 +200,7 @@ async def forgot_password(
     if raw_token is not None:
         # Load the user again to get the object for the email (request_password_reset
         # doesn't return it to avoid extra query in the not-found branch)
-        from app.services.user_service import get_user_by_email  # local import
+        from app.services.social.user_service import get_user_by_email  # local import
 
         user = await get_user_by_email(db, email=str(body.email))
         if user is not None:

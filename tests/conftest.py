@@ -19,8 +19,8 @@ from sqlalchemy_utils import create_database, database_exists, drop_database
 from alembic import command
 from app.core.security import create_access_token, hash_password
 from app.core.vector_store import VectorStore
-from app.models.recipe import Recipe
-from app.models.user import User
+from app.models.recipe.recipe import Recipe
+from app.models.auth.user import User
 from tests.testing_config import testing_settings
 
 
@@ -86,7 +86,7 @@ async def async_client(
     # repeated requests from the same in-process client).
     app.state.limiter.enabled = False
 
-    monkeypatch.setattr("app.services.recipe_service.vector_store", test_vector_store)
+    monkeypatch.setattr("app.services.recipe.recipe_service.vector_store", test_vector_store)
     monkeypatch.setattr("app.core.vector_store.vector_store", test_vector_store)
 
     test_vector_store.clear()

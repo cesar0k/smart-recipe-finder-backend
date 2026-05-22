@@ -9,9 +9,9 @@ from app.api.deps import get_current_user
 from app.core.cache import Cache, get_cache
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.user import User
-from app.services import favorite_service, recipe_service
-
+from app.models.auth.user import User
+from app.services.recipe import favorite_service
+from app.services.recipe import recipe_service
 router = APIRouter()
 
 

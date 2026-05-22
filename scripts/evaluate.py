@@ -37,9 +37,9 @@ import matplotlib
 
 from app.core.security import hash_password
 from app.core.vector_store import VectorStore
-from app.models.user import User
+from app.models.auth.user import User
 from app.schemas import RecipeCreate
-from app.services import recipe_service
+from app.services.recipe import recipe_service
 from tests.testing_config import testing_settings
 
 matplotlib.use("Agg")
@@ -459,7 +459,7 @@ async def main() -> None:
     # 1. Disable adaptive cutoff (embeddings without tags have higher distances)
     # 2. Disable LLM intent parsing (tests pure vector quality, not hybrid routing)
     from app.core import config as _app_config
-    from app.services import tag_service as _tag_service
+    from app.services.recipe import tag_service as _tag_service
     _orig_search_abs = _app_config.settings.SEARCH_ABSOLUTE_MAX_DIST
     _orig_search_margin = _app_config.settings.SEARCH_RELATIVE_MARGIN
     _orig_parse_intent = _tag_service.parse_query_intent

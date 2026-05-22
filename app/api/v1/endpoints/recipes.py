@@ -19,9 +19,9 @@ from app.core.config import settings
 from app.core.health import is_embedding_model_ready
 from app.core.rate_limit import limiter
 from app.db.session import get_db
-from app.models.user import User
-from app.services import recipe_service, tag_service
-
+from app.models.auth.user import User
+from app.services.recipe import recipe_service
+from app.services.recipe import tag_service
 router = APIRouter()
 
 

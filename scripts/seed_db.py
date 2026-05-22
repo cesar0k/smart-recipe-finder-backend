@@ -15,11 +15,11 @@ from sqlalchemy.future import select
 from app.core.s3_client import s3_client
 from app.core.vector_store import vector_store
 from app.db.session import AsyncSessionLocal
-from app.models.recipe import Recipe
-from app.models.user import User
+from app.models.recipe.recipe import Recipe
+from app.models.auth.user import User
 from app.schemas import RecipeCreate
-from app.services import recipe_service
-from app.services.tag_service import classify_recipe_tags
+from app.services.recipe import recipe_service
+from app.services.recipe.tag_service import classify_recipe_tags
 
 DATASETS_PATH = Path(__file__).resolve().parents[1] / "datasets"
 RECIPE_PHOTOS_PATH = DATASETS_PATH / "recipe_photos"

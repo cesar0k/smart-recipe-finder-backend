@@ -7,7 +7,7 @@ from sqlalchemy.future import select
 from app.core.security import decode_access_token
 from app.core.ws_manager import ws_manager
 from app.db.session import AsyncSessionLocal
-from app.models.user import User
+from app.models.auth.user import User
 
 logger = logging.getLogger(__name__)
 

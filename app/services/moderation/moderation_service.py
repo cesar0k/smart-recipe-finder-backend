@@ -1,0 +1,370 @@
+from collections.abc import Sequence
+from typing import Any, cast
+
+from sqlalchemy import func as sa_func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
+
+from app import schemas
+from app.core.cache import Cache
+from app.core.exceptions import (
+    InvalidStateError,
+    NotFoundError,
+    ValidationError,
+)
+from app.core.vector_store import vector_store
+from app.models.recipe.recipe import Recipe
+from app.models.recipe.recipe_draft import RecipeDraft
+from app.services.recipe import cache_keys
+from app.services.moderation import moderation_log_service
+from app.services.notification import notification_service
+from app.services.recipe import search_cache
+from app.services.recipe import similar_cache
+async def get_pending_recipes(db: AsyncSession) -> Sequence[Recipe]:
+    query = (
+        select(Recipe)
+        .where(Recipe.status == "pending")
+        .options(selectinload(Recipe.owner), selectinload(Recipe.cuisine_ref))
+        .order_by(Recipe.id.desc())
+    )
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+async def get_pending_drafts(db: AsyncSession) -> Sequence[RecipeDraft]:
+    query = (
+        select(RecipeDraft).where(RecipeDraft.status == "pending").order_by(RecipeDraft.id.desc())
+    )
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+async def get_pending_counts(db: AsyncSession) -> dict[str, int]:
+    """Return counts of pending recipes, drafts, and reported comments."""
+    from sqlalchemy import distinct
+
+    from app.models.comment.recipe_comment import RecipeComment
+    from app.models.comment.recipe_comment_report import RecipeCommentReport
+
+    recipe_q = select(sa_func.count(Recipe.id)).where(Recipe.status == "pending")
+    draft_q = select(sa_func.count(RecipeDraft.id)).where(RecipeDraft.status == "pending")
+    # Count distinct comments that have at least one report and aren't deleted
+    comment_report_q = select(
+        sa_func.count(distinct(RecipeCommentReport.comment_id))
+    ).join(RecipeComment, RecipeComment.id == RecipeCommentReport.comment_id).where(
+        RecipeComment.is_deleted.is_(False)
+    )
+
+    recipe_result = await db.execute(recipe_q)
+    draft_result = await db.execute(draft_q)
+    comment_report_result = await db.execute(comment_report_q)
+
+    return {
+        "recipes": recipe_result.scalar_one(),
+        "drafts": draft_result.scalar_one(),
+        "comment_reports": comment_report_result.scalar_one(),
+    }
+
+
+async def get_pending_count_cached(
+    db: AsyncSession, cache: Cache | None = None
+) -> schemas.PendingCountResponse:
+    """Read-through cache wrapper around get_pending_counts."""
+    key = cache_keys.pending_count()
+    if cache is not None:
+        cached = await cache.get_model(key, schemas.PendingCountResponse)
+        if cached is not None:
+            return cached
+
+    counts = await get_pending_counts(db)
+    response = schemas.PendingCountResponse(**counts)
+    if cache is not None:
+        await cache.set_model(key, response, ttl=cache_keys.TTL_PENDING_COUNT)
+    return response
+
+
+def _validate_action(action: str, rejection_reason: str | None) -> None:
+    """Domain validation shared by moderate_recipe and moderate_draft."""
+    if action == "reject" and not rejection_reason:
+        raise ValidationError("Rejection reason is required")
+
+
+async def _bump_moderation_caches(cache: Cache | None, *, recipe_id: int) -> None:
+    if cache is None:
+        return
+    await search_cache.bump_search_version(cache)
+    await similar_cache.bump_similar_version(cache)
+    await cache_keys.invalidate_on_moderation(cache, recipe_id=recipe_id)
+
+
+def _create_semantic_document(recipe: Recipe) -> tuple[str, dict[str, Any]]:
+    t = recipe.cooking_time_in_minutes
+    time_description = "Standard cooking time"
+    if t <= 15:
+        time_description = "Very quick, instant meal"
+    elif t <= 30:
+        time_description = "Quick, standard meal"
+    elif t > 120:
+        time_description = "Slow cooked, long preparation"
+
+    ingredients_str = ""
+    ingredients = cast(Any, recipe.ingredients)
+    if ingredients:
+        names = [item.get("name", "") for item in ingredients]
+        ingredients_str = ", ".join(names)
+
+    doc = (
+        f"Title: {recipe.title}. "
+        f"Ingredients: {ingredients_str}. "
+        f"Instructions: {recipe.instructions}. "
+        f"Cooking time: {t} minutes ({time_description}). "
+        f"Difficulty: {recipe.difficulty}. "
+        f"Cuisine: {recipe.cuisine}."
+    )
+
+    metadata = {
+        "title": recipe.title,
+        "cooking_time": recipe.cooking_time_in_minutes,
+        "difficulty": recipe.difficulty,
+        "cuisine": recipe.cuisine or "",
+    }
+
+    return doc, metadata
+
+
+async def moderate_recipe(
+    db: AsyncSession,
+    *,
+    recipe_id: int,
+    action: str,
+    moderator_id: int,
+    rejection_reason: str | None = None,
+    cache: Cache | None = None,
+) -> Recipe:
+    """Approve or reject a pending recipe.
+
+    Raises NotFoundError, InvalidStateError, ValidationError on bad input.
+    """
+    from app.services.recipe.recipe_service import get_recipe_by_id
+
+    _validate_action(action, rejection_reason)
+
+    recipe = await get_recipe_by_id(db=db, recipe_id=recipe_id)
+    if recipe is None:
+        raise NotFoundError("Recipe not found")
+    if recipe.status != "pending":
+        raise InvalidStateError(f"Recipe is already '{recipe.status}', not pending")
+
+    if action == "approve":
+        recipe.status = "approved"
+        recipe.rejection_reason = None
+
+        text, meta = _create_semantic_document(recipe)
+        await vector_store.upsert_recipe(
+            recipe_id=recipe.id,
+            title=recipe.title,
+            full_text=text,
+            metadata=meta,
+        )
+    elif action == "reject":
+        recipe.status = "rejected"
+        recipe.rejection_reason = rejection_reason
+
+        try:
+            await vector_store.delete_recipe(recipe.id)
+        except Exception:
+            pass
+
+    db.add(recipe)
+
+    # Audit log (denormalized names for display)
+    from app.models.auth.user import User as _User
+
+    mod_result = await db.execute(select(_User.username).where(_User.id == moderator_id))
+    mod_username = mod_result.scalar_one_or_none() or ""
+
+    await moderation_log_service.create_log(
+        db,
+        moderator_id=moderator_id,
+        recipe_id=recipe.id,
+        action=action,
+        reason=rejection_reason,
+        recipe_title=recipe.title,
+        moderator_username=mod_username,
+    )
+
+    # Notify recipe owner (keys, not hardcoded text — frontend translates)
+    _action_past = {"approve": "approved", "reject": "rejected"}
+    if recipe.owner_id is not None:
+        notif_type = f"recipe_{_action_past[action]}"
+        await notification_service.notify_and_broadcast(
+            db,
+            user_id=recipe.owner_id,
+            type=notif_type,
+            title=recipe.title,
+            message=rejection_reason or "",
+            recipe_id=recipe.id,
+        )
+
+    # Notify followers when recipe is approved
+    if action == "approve" and recipe.owner_id is not None:
+        from app.services.social import follow_service
+        from app.models.auth.user import User as _User2
+
+        follower_ids = await follow_service.get_follower_ids(db, user_id=recipe.owner_id)
+        follower_ids.discard(recipe.owner_id)
+        if follower_ids:
+            owner_row = await db.execute(
+                select(_User2.username, _User2.display_name).where(_User2.id == recipe.owner_id)
+            )
+            owner = owner_row.one_or_none()
+            author_name = (owner.display_name or owner.username) if owner else ""
+            await notification_service.notify_bulk_and_broadcast(
+                db,
+                user_ids=list(follower_ids),
+                type="followed_user_published",
+                title=recipe.title,
+                message=author_name,
+                recipe_id=recipe.id,
+            )
+
+    await db.commit()
+    await db.refresh(recipe)
+
+    await _bump_moderation_caches(cache, recipe_id=recipe.id)
+    return recipe
+
+
+async def moderate_draft(
+    db: AsyncSession,
+    *,
+    draft_id: int,
+    action: str,
+    moderator_id: int,
+    rejection_reason: str | None = None,
+    cache: Cache | None = None,
+) -> RecipeDraft:
+    """Approve or reject a draft.
+
+    Raises NotFoundError, InvalidStateError, ValidationError on bad input.
+    """
+    _validate_action(action, rejection_reason)
+
+    draft_result = await db.execute(select(RecipeDraft).where(RecipeDraft.id == draft_id))
+    draft = draft_result.scalar_one_or_none()
+    if draft is None:
+        raise NotFoundError("Draft not found")
+    if draft.status != "pending":
+        raise InvalidStateError(f"Draft is already '{draft.status}', not pending")
+
+    if action == "approve":
+        recipe_result = await db.execute(
+            select(Recipe)
+            .where(Recipe.id == draft.recipe_id)
+            .options(selectinload(Recipe.cuisine_ref))
+        )
+        recipe = recipe_result.scalar_one_or_none()
+
+        if recipe is None:
+            draft.status = "rejected"
+            draft.rejection_reason = "Original recipe no longer exists"
+            db.add(draft)
+            await db.commit()
+            await db.refresh(draft)
+            return draft
+
+        from app.services.recipe import cuisine_service
+
+        from app.services.recipe import recipe_service as _recipe_svc
+        recipe.title = draft.title
+        recipe.instructions = draft.instructions
+        recipe.cooking_time_in_minutes = draft.cooking_time_in_minutes
+        recipe.difficulty = draft.difficulty
+        cuisine_obj = await cuisine_service.get_or_create_by_name(db, name=draft.cuisine)
+        recipe.cuisine_id = cuisine_obj.id if cuisine_obj else None
+        # draft.ingredients is still JSONB; extract names for the M2M rebuild.
+        draft_ingredient_names = [
+            (item.get("name") or "")
+            for item in (draft.ingredients or [])
+            if item.get("name")
+        ]
+        await _recipe_svc._set_recipe_ingredients(db, recipe, draft_ingredient_names)
+        db.add(recipe)
+        # Flush so _create_semantic_document below sees the new ingredients.
+        await db.flush()
+        await _recipe_svc._ensure_cuisine_loaded(db, recipe)
+        await _recipe_svc._ensure_ingredients_loaded(db, recipe)
+
+        text, meta = _create_semantic_document(recipe)
+        await vector_store.upsert_recipe(
+            recipe_id=recipe.id,
+            title=recipe.title,
+            full_text=text,
+            metadata=meta,
+        )
+
+        draft.status = "approved"
+        db.add(draft)
+
+    elif action == "reject":
+        draft.status = "rejected"
+        draft.rejection_reason = rejection_reason
+        db.add(draft)
+
+    # Audit log (denormalized names for display)
+    from app.models.auth.user import User as _User
+
+    mod_result = await db.execute(select(_User.username).where(_User.id == moderator_id))
+    mod_username = mod_result.scalar_one_or_none() or ""
+
+    await moderation_log_service.create_log(
+        db,
+        moderator_id=moderator_id,
+        draft_id=draft.id,
+        recipe_id=draft.recipe_id,
+        action=action,
+        reason=rejection_reason,
+        recipe_title=draft.title,
+        moderator_username=mod_username,
+    )
+
+    # Notify draft author (keys, not hardcoded text — frontend translates)
+    _action_past_d = {"approve": "approved", "reject": "rejected"}
+    notif_type = f"draft_{_action_past_d[action]}"
+    await notification_service.notify_and_broadcast(
+        db,
+        user_id=draft.author_id,
+        type=notif_type,
+        title=draft.title,
+        message=rejection_reason or "",
+        recipe_id=draft.recipe_id,
+    )
+
+    # Notify followers when draft is approved (recipe goes live)
+    if action == "approve" and draft.recipe_id is not None:
+        from app.services.social import follow_service
+        from app.models.auth.user import User as _User3
+
+        follower_ids = await follow_service.get_follower_ids(db, user_id=draft.author_id)
+        follower_ids.discard(draft.author_id)
+        if follower_ids:
+            owner_row = await db.execute(
+                select(_User3.username, _User3.display_name).where(_User3.id == draft.author_id)
+            )
+            owner = owner_row.one_or_none()
+            author_name = (owner.display_name or owner.username) if owner else ""
+            await notification_service.notify_bulk_and_broadcast(
+                db,
+                user_ids=list(follower_ids),
+                type="followed_user_published",
+                title=draft.title,
+                message=author_name,
+                recipe_id=draft.recipe_id,
+            )
+
+    await db.commit()
+    await db.refresh(draft)
+
+    await _bump_moderation_caches(cache, recipe_id=draft.recipe_id)
+    return draft
