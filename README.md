@@ -76,6 +76,17 @@ docker compose exec app python scripts/create_admin.py create \
     --password 'secure_password'
 ```
 
+> **Windows (PowerShell / cmd):** the `\` line-continuation is bash-only. Either put the command on a single line, or use the PowerShell backtick (`` ` ``) instead:
+>
+> ```powershell
+> docker compose exec app python scripts/create_admin.py create `
+>     --email admin@example.com `
+>     --username admin `
+>     --password 'secure_password'
+> ```
+>
+> The same applies to any multi-line `\`-continued commands below.
+
 To transfer admin to another user:
 
 ```bash

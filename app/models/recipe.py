@@ -83,9 +83,7 @@ class Recipe(Base):
 
     @property
     def owner_display_name(self) -> str | None:
-        """Optional display name set by the owner. None when not provided —
-        callers fall back to username. Same loading semantics as
-        owner_username (relies on the owner relationship being eager-loaded)."""
+        """Optional display name; callers fall back to username when None."""
         try:
             return self.owner.display_name if self.owner else None
         except Exception:
@@ -93,7 +91,6 @@ class Recipe(Base):
 
     @property
     def owner_avatar_url(self) -> str | None:
-        """Avatar URL of the owner, if uploaded. Same loading semantics."""
         try:
             return self.owner.avatar_url if self.owner else None
         except Exception:
