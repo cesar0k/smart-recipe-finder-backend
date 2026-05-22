@@ -1,6 +1,15 @@
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models, schemas
@@ -8,6 +17,7 @@ from app.api.deps import get_current_user, get_current_user_optional
 from app.core.cache import Cache, get_cache
 from app.core.config import settings
 from app.core.health import is_embedding_model_ready
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.models.user import User
 from app.services import recipe_service, tag_service
@@ -145,7 +155,9 @@ async def read_user_recipes(
 
 
 @router.get("/search/", response_model=list[schemas.Recipe], operation_id="search_recipes")
+@limiter.limit(settings.RATE_LIMIT_SEARCH)
 async def search_recipes(
+    request: Request,
     *,
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[Cache, Depends(get_cache)],

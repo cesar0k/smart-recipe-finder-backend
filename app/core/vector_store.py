@@ -12,10 +12,17 @@ from chromadb.types import VectorQueryResult
 from sentence_transformers import SentenceTransformer
 
 from app.core.config import settings
+from app.core.single_flight import SingleFlight
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
 
 logger = logging.getLogger(__name__)
+
+# Coalesces concurrent identical search() calls into a single embed+query.
+# Per-process; multiple uvicorn workers each get their own registry, which is
+# fine because the Redis result cache short-circuits the next identical hit
+# from any worker.
+_search_single_flight = SingleFlight()
 
 
 class VectorStore:
@@ -134,9 +141,23 @@ class VectorStore:
         await asyncio.to_thread(_sync_upsert)
 
     async def search(self, query: str, n_results: int = 5) -> list[tuple[int, float]]:
-        """Return (recipe_id, distance) pairs ordered by ascending distance."""
-        VectorStore.search_calls_count += 1
+        """Return (recipe_id, distance) pairs ordered by ascending distance.
 
+        Wrapped in a single-flight so N concurrent requests for the same query
+        share one embedding + ChromaDB call. The redis-backed search_cache
+        catches the *next* identical request after this one completes; the
+        single-flight is what protects us during the cache-miss window when
+        multiple requests arrive in the same few hundred milliseconds.
+        """
+        VectorStore.search_calls_count += 1
+        flight_key = f"vs:search:{n_results}:{query}"
+        return await _search_single_flight.do(
+            flight_key, lambda: self._search_uncached(query, n_results)
+        )
+
+    async def _search_uncached(
+        self, query: str, n_results: int
+    ) -> list[tuple[int, float]]:
         query_vec_result = await self.embed_query(query)
         query_embedding_list = query_vec_result.tolist()
 
