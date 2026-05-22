@@ -4,7 +4,6 @@ from typing import AsyncGenerator, Generator
 
 import httpx
 import pytest
-from _pytest.fixtures import FixtureRequest
 from alembic.config import Config
 from httpx import ASGITransport
 from pytest import MonkeyPatch
@@ -79,7 +78,6 @@ async def async_client(
     db_engine: AsyncEngine,
     test_vector_store: VectorStore,
     monkeypatch: MonkeyPatch,
-    request: FixtureRequest,
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
     from app.db.session import get_db
     from app.main import app
@@ -91,15 +89,9 @@ async def async_client(
     monkeypatch.setattr("app.services.recipe_service.vector_store", test_vector_store)
     monkeypatch.setattr("app.core.vector_store.vector_store", test_vector_store)
 
-    is_eval_test = (
-        request.node.get_closest_marker("eval") is not None
-        or request.node.get_closest_marker("no_db_cleanup") is not None
-    )
-
-    if not is_eval_test:
-        test_vector_store.clear()
-        async with db_engine.begin() as conn:
-            await conn.execute(delete(Recipe))
+    test_vector_store.clear()
+    async with db_engine.begin() as conn:
+        await conn.execute(delete(Recipe))
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         async with async_sessionmaker(
