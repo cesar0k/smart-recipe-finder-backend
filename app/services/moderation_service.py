@@ -29,7 +29,7 @@ async def get_pending_recipes(db: AsyncSession) -> Sequence[Recipe]:
     query = (
         select(Recipe)
         .where(Recipe.status == "pending")
-        .options(selectinload(Recipe.owner))
+        .options(selectinload(Recipe.owner), selectinload(Recipe.cuisine_ref))
         .order_by(Recipe.id.desc())
     )
     result = await db.execute(query)
@@ -263,7 +263,11 @@ async def moderate_draft(
         raise InvalidStateError(f"Draft is already '{draft.status}', not pending")
 
     if action == "approve":
-        recipe_result = await db.execute(select(Recipe).where(Recipe.id == draft.recipe_id))
+        recipe_result = await db.execute(
+            select(Recipe)
+            .where(Recipe.id == draft.recipe_id)
+            .options(selectinload(Recipe.cuisine_ref))
+        )
         recipe = recipe_result.scalar_one_or_none()
 
         if recipe is None:
@@ -274,11 +278,14 @@ async def moderate_draft(
             await db.refresh(draft)
             return draft
 
+        from app.services import cuisine_service
+
         recipe.title = draft.title
         recipe.instructions = draft.instructions
         recipe.cooking_time_in_minutes = draft.cooking_time_in_minutes
         recipe.difficulty = draft.difficulty
-        recipe.cuisine = draft.cuisine
+        cuisine_obj = await cuisine_service.get_or_create_by_name(db, name=draft.cuisine)
+        recipe.cuisine_id = cuisine_obj.id if cuisine_obj else None
         recipe.ingredients = draft.ingredients
         db.add(recipe)
 

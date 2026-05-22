@@ -1,4 +1,5 @@
 from .base import Base
+from .cuisine import Cuisine
 from .email_notification_preference import EmailNotificationPreference
 from .moderation_log import ModerationLog
 from .user_follow import UserFollow
@@ -15,6 +16,7 @@ from .user import User
 
 __all__ = [
     "Base",
+    "Cuisine",
     "EmailNotificationPreference",
     "ModerationLog",
     "UserFollow",

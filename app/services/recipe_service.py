@@ -44,13 +44,33 @@ __all__ = [
 
 
 def _with_owner(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
-    """Add selectinload for owner relationship."""
-    return query.options(selectinload(Recipe.owner))
+    """Add selectinload for owner + cuisine relationships.
+
+    cuisine_ref is loaded too because Recipe.cuisine is a property that reads
+    it; without the load Recipe.cuisine would raise from lazy="raise".
+    """
+    return query.options(
+        selectinload(Recipe.owner),
+        selectinload(Recipe.cuisine_ref),
+    )
 
 
 def _with_relations(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
-    """Add selectinload for owner + tags relationships."""
-    return query.options(selectinload(Recipe.owner), selectinload(Recipe.tags))
+    """Add selectinload for owner + tags + cuisine relationships."""
+    return query.options(
+        selectinload(Recipe.owner),
+        selectinload(Recipe.tags),
+        selectinload(Recipe.cuisine_ref),
+    )
+
+
+async def _ensure_cuisine_loaded(db: AsyncSession, recipe: Recipe) -> None:
+    """After a refresh, eager-load Recipe.cuisine_ref if the FK is set but the
+    relationship attribute hasn't been populated yet. Cheap no-op when not
+    needed."""
+    if recipe.cuisine_id is None:
+        return
+    await db.refresh(recipe, attribute_names=["cuisine_ref"])
 
 
 async def _reload_recipe(db: AsyncSession, recipe_id: int) -> Recipe | None:
@@ -378,23 +398,30 @@ def _apply_filters(
         if difficulties:
             query = query.where(func.lower(Recipe.difficulty).in_(difficulties))
 
-    # Cuisine multi-select (comma-separated, case-insensitive)
+    # Cuisine multi-select (comma-separated, case-insensitive).
+    # Joins to the cuisines reference table and filters by name.
     if cuisine:
         cuisines = [c.strip().lower() for c in cuisine.split(",") if c.strip()]
         if cuisines:
-            query = query.where(func.lower(Recipe.cuisine).in_(cuisines))
+            from app.models.cuisine import Cuisine
+
+            query = query.join(Cuisine, Recipe.cuisine_id == Cuisine.id).where(
+                func.lower(Cuisine.name).in_(cuisines)
+            )
 
     return query
 
 
 async def get_distinct_cuisines(db: AsyncSession) -> list[str]:
-    """Return sorted list of distinct cuisine values from approved recipes."""
+    """Return sorted list of distinct cuisine names that are actually used by
+    at least one approved recipe."""
+    from app.models.cuisine import Cuisine
+
     result = await db.execute(
-        select(distinct(Recipe.cuisine))
+        select(distinct(Cuisine.name))
+        .join(Recipe, Recipe.cuisine_id == Cuisine.id)
         .where(Recipe.status == "approved")
-        .where(Recipe.cuisine.isnot(None))
-        .where(Recipe.cuisine != "")
-        .order_by(Recipe.cuisine)
+        .order_by(Cuisine.name)
     )
     return [row[0] for row in result.all()]
 
@@ -498,22 +525,29 @@ async def create_recipe(
     current_user: User,
     cache: Cache | None = None,
 ) -> Recipe:
-    recipe_data = recipe_in.model_dump(exclude={"ingredients"})
+    recipe_data = recipe_in.model_dump(exclude={"ingredients", "cuisine"})
     json_ingredients = [{"name": name} for name in recipe_in.ingredients]
 
     # Moderators and admins get auto-approved, regular users go to pending
     status = "approved" if current_user.role in ("moderator", "admin") else "pending"
+
+    # Normalise the free-form cuisine into a FK to the cuisines reference table.
+    from app.services import cuisine_service
+
+    cuisine_obj = await cuisine_service.get_or_create_by_name(db, name=recipe_in.cuisine)
 
     db_recipe = Recipe(
         **recipe_data,
         ingredients=json_ingredients,
         owner_id=current_user.id,
         status=status,
+        cuisine_id=cuisine_obj.id if cuisine_obj else None,
     )
 
     db.add(db_recipe)
     await db.commit()
     await db.refresh(db_recipe)
+    await _ensure_cuisine_loaded(db, db_recipe)
 
     if db_recipe.status == "approved":
         text, meta = _create_semantic_document(db_recipe)
@@ -858,12 +892,20 @@ async def _update_recipe_directly(
         json_ingredients = [{"name": i} for i in raw_ingredients]
         db_recipe.ingredients = json_ingredients
 
+    if "cuisine" in update_data:
+        from app.services import cuisine_service
+
+        new_cuisine_name = update_data.pop("cuisine")
+        cuisine_obj = await cuisine_service.get_or_create_by_name(db, name=new_cuisine_name)
+        db_recipe.cuisine_id = cuisine_obj.id if cuisine_obj else None
+
     for field, value in update_data.items():
         setattr(db_recipe, field, value)
 
     db.add(db_recipe)
     await db.commit()
     await db.refresh(db_recipe)
+    await _ensure_cuisine_loaded(db, db_recipe)
 
     # Re-index if approved
     if db_recipe.status == "approved":

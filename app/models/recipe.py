@@ -11,6 +11,7 @@ from .base import Base
 from .enums import RecipeDifficulty, RecipeStatus, pg_enum
 
 if TYPE_CHECKING:
+    from .cuisine import Cuisine
     from .recipe_tags import RecipeTags
     from .user import User
 
@@ -27,7 +28,9 @@ class Recipe(Base):
         pg_enum(RecipeDifficulty, name="recipe_difficulty"),
         nullable=False,
     )
-    cuisine: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    cuisine_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("cuisines.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     ingredients: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=[], nullable=False)
     image_urls: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, server_default=text("'{}'"), nullable=False
@@ -66,6 +69,11 @@ class Recipe(Base):
     # Relationship to User (lazy="raise" — must explicitly load via selectinload)
     owner: Mapped[User | None] = relationship("User", lazy="raise")
 
+    # Relationship to Cuisine — small reference table; lazy="raise" so callers
+    # explicitly opt into the join (we keep it as a separate query in most
+    # places to stay friendly to the existing selectinload patterns).
+    cuisine_ref: Mapped[Cuisine | None] = relationship("Cuisine", lazy="raise")
+
     # Relationship to RecipeTags — 1:1, NULL until background task completes.
     # lazy="noload": never auto-load (prevents N+1), returns None if not selectinloaded.
     # passive_deletes=True + cascade="all, delete-orphan" lets the DB's ON DELETE
@@ -78,6 +86,15 @@ class Recipe(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    @property
+    def cuisine(self) -> str | None:
+        """Pydantic-friendly accessor: returns the cuisine *name* (or None).
+        Requires the ``cuisine_ref`` relationship to be selectinloaded."""
+        try:
+            return self.cuisine_ref.name if self.cuisine_ref else None
+        except Exception:
+            return None
 
     @property
     def owner_username(self) -> str | None:

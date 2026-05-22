@@ -163,13 +163,18 @@ async def classify_recipe_tags(recipe_id: int) -> None:
 
     try:
         from sqlalchemy.future import select
+        from sqlalchemy.orm import selectinload
 
         from app.db.session import AsyncSessionLocal
         from app.models.recipe import Recipe
         from app.models.recipe_tags import RecipeTags
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Recipe).where(Recipe.id == recipe_id))
+            result = await db.execute(
+                select(Recipe)
+                .where(Recipe.id == recipe_id)
+                .options(selectinload(Recipe.cuisine_ref))
+            )
             recipe = result.scalar_one_or_none()
             if recipe is None:
                 log.warning("tag_service: recipe %d not found, skipping", recipe_id)
