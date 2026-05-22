@@ -44,24 +44,94 @@ __all__ = [
 
 
 def _with_owner(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
-    """Add selectinload for owner + cuisine relationships.
-
-    cuisine_ref is loaded too because Recipe.cuisine is a property that reads
-    it; without the load Recipe.cuisine would raise from lazy="raise".
-    """
+    """Eager-load the relationships the Pydantic Recipe schema needs to
+    serialize: owner, cuisine, images. Without these the ORM properties
+    would raise from lazy="raise"/"noload"."""
     return query.options(
         selectinload(Recipe.owner),
         selectinload(Recipe.cuisine_ref),
+        selectinload(Recipe.images),
     )
 
 
 def _with_relations(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
-    """Add selectinload for owner + tags + cuisine relationships."""
+    """Add selectinload for owner + tags + cuisine + images relationships."""
     return query.options(
         selectinload(Recipe.owner),
         selectinload(Recipe.tags),
         selectinload(Recipe.cuisine_ref),
+        selectinload(Recipe.images),
     )
+
+
+async def _ensure_images_loaded(db: AsyncSession, recipe: Recipe) -> None:
+    """Eager-load Recipe.images so the image_urls / thumbnail_urls properties
+    don't return an empty list after a fresh insert/refresh."""
+    await db.refresh(recipe, attribute_names=["images"])
+
+
+async def _add_recipe_images(
+    db: AsyncSession, recipe: Recipe, pairs: list[tuple[str, str]]
+) -> None:
+    """Append (full_url, thumb_url) pairs to recipe.images, continuing the
+    existing positions. Caller is responsible for committing."""
+    from app.models.recipe_image import RecipeImage
+
+    res = await db.execute(
+        select(func.coalesce(func.max(RecipeImage.position), -1)).where(
+            RecipeImage.recipe_id == recipe.id
+        )
+    )
+    next_pos = (res.scalar_one() or -1) + 1
+    for full_url, thumb_url in pairs:
+        db.add(
+            RecipeImage(
+                recipe_id=recipe.id,
+                full_url=full_url,
+                thumbnail_url=thumb_url,
+                position=next_pos,
+            )
+        )
+        next_pos += 1
+
+
+async def _set_recipe_images(
+    db: AsyncSession, recipe: Recipe, new_full_urls: list[str]
+) -> None:
+    """Replace recipe.images so that, after the call, the relationship matches
+    new_full_urls *exactly*:
+      - rows whose full_url is in new_full_urls survive (keeping their thumb)
+      - rows whose full_url is absent are deleted (and their S3 objects too)
+      - position is rewritten to match the order of new_full_urls.
+    """
+    from app.models.recipe_image import RecipeImage
+
+    existing_res = await db.execute(
+        select(RecipeImage).where(RecipeImage.recipe_id == recipe.id)
+    )
+    existing = {img.full_url: img for img in existing_res.scalars().all()}
+
+    new_set = set(new_full_urls)
+    for full_url, img in existing.items():
+        if full_url not in new_set:
+            await s3_client.delete_image_from_s3(full_url)
+            await s3_client.delete_image_from_s3(_derive_thumb_url(full_url))
+            await db.delete(img)
+
+    for idx, full_url in enumerate(new_full_urls):
+        if full_url in existing:
+            existing[full_url].position = idx
+            db.add(existing[full_url])
+        else:
+            # No matching existing row — derive thumbnail from URL pattern.
+            db.add(
+                RecipeImage(
+                    recipe_id=recipe.id,
+                    full_url=full_url,
+                    thumbnail_url=_derive_thumb_url(full_url),
+                    position=idx,
+                )
+            )
 
 
 async def _ensure_cuisine_loaded(db: AsyncSession, recipe: Recipe) -> None:
@@ -525,7 +595,12 @@ async def create_recipe(
     current_user: User,
     cache: Cache | None = None,
 ) -> Recipe:
-    recipe_data = recipe_in.model_dump(exclude={"ingredients", "cuisine"})
+    # image_urls/thumbnail_urls are excluded — the relationship is populated
+    # via upload_recipe_images() after the recipe is created. cuisine is
+    # converted to a FK via cuisine_service below.
+    recipe_data = recipe_in.model_dump(
+        exclude={"ingredients", "cuisine", "image_urls", "thumbnail_urls"}
+    )
     json_ingredients = [{"name": name} for name in recipe_in.ingredients]
 
     # Moderators and admins get auto-approved, regular users go to pending
@@ -548,6 +623,7 @@ async def create_recipe(
     await db.commit()
     await db.refresh(db_recipe)
     await _ensure_cuisine_loaded(db, db_recipe)
+    await _ensure_images_loaded(db, db_recipe)
 
     if db_recipe.status == "approved":
         text, meta = _create_semantic_document(db_recipe)
@@ -859,33 +935,13 @@ async def _update_recipe_directly(
 
     if "image_urls" in update_data:
         raw_urls = update_data.pop("image_urls")
-
-        if raw_urls is None:
-            new_urls_list: list[str] = []
-        else:
-            new_urls_list = [str(url) for url in raw_urls]
-
-        current_urls = set(db_recipe.image_urls) if db_recipe.image_urls else set()
-        new_urls = set(new_urls_list)
-        urls_to_delete = current_urls - new_urls
-
-        db_recipe.image_urls = new_urls_list
-
-        # Sync thumbnail_urls: keep only thumbs for remaining images, in same order
-        current_thumbs = list(db_recipe.thumbnail_urls) if db_recipe.thumbnail_urls else []
-        old_url_list = list(db_recipe.image_urls) if db_recipe.image_urls else []
-        # Build a mapping from full URL → thumb URL using position
-        url_to_thumb = {}
-        for i, u in enumerate(old_url_list):
-            if i < len(current_thumbs):
-                url_to_thumb[u] = current_thumbs[i]
-        # Reorder thumbnails to match new image_urls order
-        new_thumbs = [url_to_thumb[u] for u in new_urls_list if u in url_to_thumb]
-        db_recipe.thumbnail_urls = new_thumbs
-
-        for url in urls_to_delete:
-            await s3_client.delete_image_from_s3(url)
-            await s3_client.delete_image_from_s3(_derive_thumb_url(url))
+        new_urls_list: list[str] = (
+            [str(url) for url in raw_urls] if raw_urls else []
+        )
+        # Apply via the normalised recipe_images table — keeps the survivors,
+        # drops the removed ones (and their S3 objects), reorders by the new
+        # client-supplied sequence.
+        await _set_recipe_images(db, db_recipe, new_urls_list)
 
     if "ingredients" in update_data:
         raw_ingredients = update_data.pop("ingredients")
@@ -906,6 +962,7 @@ async def _update_recipe_directly(
     await db.commit()
     await db.refresh(db_recipe)
     await _ensure_cuisine_loaded(db, db_recipe)
+    await _ensure_images_loaded(db, db_recipe)
 
     # Re-index if approved
     if db_recipe.status == "approved":
@@ -1109,23 +1166,13 @@ async def delete_recipe_images(
     if not urls_to_process:
         return db_recipe
 
-    remaining_urls = list(current_urls - urls_to_process)
-    db_recipe.image_urls = remaining_urls
-
-    # Also remove corresponding thumbnails
-    current_thumbs = list(db_recipe.thumbnail_urls) if db_recipe.thumbnail_urls else []
-    thumb_urls_to_delete = {_derive_thumb_url(url) for url in urls_to_process}
-    remaining_thumbs = [t for t in current_thumbs if t not in thumb_urls_to_delete]
-    db_recipe.thumbnail_urls = remaining_thumbs
-
-    db.add(db_recipe)
+    remaining_urls = [u for u in db_recipe.image_urls if u not in urls_to_process]
+    # _set_recipe_images keeps the survivors in the supplied order and removes
+    # both the DB rows and the S3 objects for the dropped URLs.
+    await _set_recipe_images(db, db_recipe, remaining_urls)
     await db.commit()
     await db.refresh(db_recipe)
-
-    # Delete from S3: full images + their thumbnails
-    for url in urls_to_process:
-        await s3_client.delete_image_from_s3(url)
-        await s3_client.delete_image_from_s3(_derive_thumb_url(url))
+    await _ensure_images_loaded(db, db_recipe)
 
     if cache is not None:
         await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
@@ -1169,14 +1216,10 @@ async def upload_recipe_images(
 
     results = await asyncio.gather(*[_process_file(f) for f in files])
 
-    current_urls = list(db_recipe.image_urls) if db_recipe.image_urls else []
-    current_thumbs = list(db_recipe.thumbnail_urls) if db_recipe.thumbnail_urls else []
-    db_recipe.image_urls = current_urls + [r[0] for r in results]
-    db_recipe.thumbnail_urls = current_thumbs + [r[1] for r in results]
-
-    db.add(db_recipe)
+    await _add_recipe_images(db, db_recipe, results)
     await db.commit()
     await db.refresh(db_recipe)
+    await _ensure_images_loaded(db, db_recipe)
 
     if cache is not None:
         await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Float, ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import text
 
@@ -12,6 +12,7 @@ from .enums import RecipeDifficulty, RecipeStatus, pg_enum
 
 if TYPE_CHECKING:
     from .cuisine import Cuisine
+    from .recipe_image import RecipeImage
     from .recipe_tags import RecipeTags
     from .user import User
 
@@ -32,12 +33,6 @@ class Recipe(Base):
         Integer, ForeignKey("cuisines.id", ondelete="SET NULL"), nullable=True, index=True
     )
     ingredients: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=[], nullable=False)
-    image_urls: Mapped[list[str]] = mapped_column(
-        ARRAY(String), default=list, server_default=text("'{}'"), nullable=False
-    )
-    thumbnail_urls: Mapped[list[str]] = mapped_column(
-        ARRAY(String), default=list, server_default=text("'{}'"), nullable=False
-    )
     owner_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -86,6 +81,33 @@ class Recipe(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    # Recipe images — normalised one-row-per-image. position is the display
+    # order (matches the old ARRAY index). cascade deletes the rows when the
+    # recipe is deleted; passive_deletes defers to the DB's ON DELETE CASCADE.
+    images: Mapped[list[RecipeImage]] = relationship(
+        "RecipeImage",
+        order_by="RecipeImage.position",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="noload",
+    )
+
+    @property
+    def image_urls(self) -> list[str]:
+        """Pydantic-compatible accessor — flat list of full-size URLs in order.
+        Requires the ``images`` relationship to be selectinloaded."""
+        try:
+            return [img.full_url for img in self.images]
+        except Exception:
+            return []
+
+    @property
+    def thumbnail_urls(self) -> list[str]:
+        try:
+            return [img.thumbnail_url for img in self.images]
+        except Exception:
+            return []
 
     @property
     def cuisine(self) -> str | None:
