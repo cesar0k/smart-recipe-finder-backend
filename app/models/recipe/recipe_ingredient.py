@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models._base.base import Base
@@ -12,9 +12,11 @@ if TYPE_CHECKING:
 
 
 class RecipeIngredient(Base):
-    """M2M between Recipe and Ingredient with amount/unit/position.
+    """M2M between Recipe and Ingredient with display position.
 
-    amount is VARCHAR so values like "½ стакана" or "по вкусу" fit naturally.
+    Free-form quantities (e.g. "½ стакана сахара", "щепотка соли", "по вкусу")
+    live directly inside ``Ingredient.name`` — we don't split amount/unit into
+    structured columns because the UI submits a single string per row.
     """
 
     __tablename__ = "recipe_ingredients"
@@ -30,8 +32,6 @@ class RecipeIngredient(Base):
         ForeignKey("ingredients.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    amount: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    unit: Mapped[str | None] = mapped_column(String(50), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     ingredient: Mapped[Ingredient] = relationship("Ingredient", lazy="raise")
