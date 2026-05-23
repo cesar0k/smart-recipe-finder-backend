@@ -1,12 +1,13 @@
 """convert string columns to postgres enums
 
 Replaces String(...) columns with native Postgres ENUM types for fields that
-have a fixed, well-known value domain. The values come from `app.models.enums`
-and were cross-checked against `SELECT DISTINCT` on the live database before
-this migration was written.
+have a fixed, well-known value domain. The values come from `app.models.enums`.
 
-Note: each `alter_column` uses `postgresql_using = "<col>::<enum>"` so Postgres
-can cast the existing string values to the new enum type in place.
+Each alter_column uses `postgresql_using = "<col>::<enum>"` to cast existing
+strings to the new enum. LLM-classified tag columns occasionally drift outside
+the schema (e.g. "breakfast" landing in `occasion` instead of `meal_type`),
+so before the cast we wipe any out-of-domain row: nullable columns are NULL'd,
+NOT NULL columns reset to their server default.
 
 Revision ID: p7j8k9l0m1n2
 Revises: o6i7j8k9l0m1
@@ -122,8 +123,24 @@ def upgrade() -> None:
     for enum_name, values, columns in ENUM_SPECS:
         pg_enum = postgresql.ENUM(*values, name=enum_name, create_type=False)
         pg_enum.create(bind, checkfirst=True)
+        # Build a SQL list of quoted, valid values for IN-checks below.
+        values_sql = ", ".join(f"'{v}'" for v in values)
         for table, column, server_default in columns:
-            if server_default is not None:
+            # Sanitize rows whose stored value is no longer in the enum domain
+            # (e.g. LLM-classified tags occasionally drift outside the schema).
+            # NULL-able columns get NULL'd; NOT NULL columns fall back to the
+            # server default. Without this the ALTER TABLE ... USING ::enum
+            # cast on the next line errors out on the first stray value.
+            if server_default is None:
+                op.execute(
+                    f"UPDATE {table} SET {column} = NULL "
+                    f"WHERE {column} IS NOT NULL AND {column} NOT IN ({values_sql})"
+                )
+            else:
+                op.execute(
+                    f"UPDATE {table} SET {column} = '{server_default}' "
+                    f"WHERE {column} NOT IN ({values_sql})"
+                )
                 # Postgres can't cast the literal-string default to the new
                 # enum type implicitly — drop it, cast the column, re-set it.
                 op.execute(f"ALTER TABLE {table} ALTER COLUMN {column} DROP DEFAULT")
