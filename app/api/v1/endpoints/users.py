@@ -12,11 +12,13 @@ from app.api.deps import get_current_user, get_current_user_optional, require_ad
 from app.core.cache import Cache, get_cache
 from app.core.exceptions import ValidationError
 from app.db.session import get_db
-from app.models.notification.email_notification_preference import EmailNotificationPreference
+from app.models._base.enums import NotificationType
 from app.models.auth.user import User
+from app.models.notification.email_notification_preference import EmailNotificationPreference
 from app.services.auth import auth_service
 from app.services.notification import email_service
 from app.services.social import user_service
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -166,7 +168,7 @@ async def get_email_preferences(
     saved = {p.type: p.enabled for p in result.scalars().all()}
 
     prefs = [
-        schemas.EmailPrefResponse(type=t, enabled=saved.get(t, True))
+        schemas.EmailPrefResponse(type=t, enabled=saved.get(NotificationType(t), True))
         for t in schemas.EMAIL_NOTIFICATION_TYPES
     ]
     return prefs

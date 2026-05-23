@@ -26,14 +26,18 @@ from app.core.s3_client import s3_client
 from app.core.text_utils import get_word_forms
 from app.core.vector_store import vector_store
 from app.models import Recipe, RecipeTags
-from app.models.recipe.recipe_draft import RecipeDraft
+from app.models._base.enums import RecipeStatus
 from app.models.auth.user import User
+from app.models.recipe.recipe_draft import RecipeDraft
 from app.schemas import RecipeCreate, RecipeUpdate
-from app.services.recipe import cache_keys
-from app.services.recipe import favorite_service
-from app.services.recipe import image_service
-from app.services.recipe import search_cache
-from app.services.recipe import similar_cache
+from app.services.recipe import (
+    cache_keys,
+    favorite_service,
+    image_service,
+    search_cache,
+    similar_cache,
+)
+
 __all__ = [
     "create_recipe",
     "get_all_recipes",
@@ -71,9 +75,7 @@ def _with_relations(query: Select[tuple[Recipe]]) -> Select[tuple[Recipe]]:
     )
 
 
-async def _set_recipe_ingredients(
-    db: AsyncSession, recipe: Recipe, names: list[str]
-) -> None:
+async def _set_recipe_ingredients(db: AsyncSession, recipe: Recipe, names: list[str]) -> None:
     """Rebuild recipe.recipe_ingredients to match *names* in the given order.
 
     Names are normalised (trim + lower) and the Ingredient rows are
@@ -82,9 +84,7 @@ async def _set_recipe_ingredients(
     from app.models.recipe.recipe_ingredient import RecipeIngredient
     from app.services.recipe import ingredient_service
 
-    await db.execute(
-        sa_delete(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id)
-    )
+    await db.execute(sa_delete(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id))
 
     ingredients_map = await ingredient_service.get_or_create_many(db, names=names)
 
@@ -136,9 +136,7 @@ async def _add_recipe_images(
         next_pos += 1
 
 
-async def _set_recipe_images(
-    db: AsyncSession, recipe: Recipe, new_full_urls: list[str]
-) -> None:
+async def _set_recipe_images(db: AsyncSession, recipe: Recipe, new_full_urls: list[str]) -> None:
     """Rebuild recipe.images to match new_full_urls exactly.
 
     Surviving rows keep their thumb; removed ones are deleted from S3 too;
@@ -146,9 +144,7 @@ async def _set_recipe_images(
     """
     from app.models.recipe.recipe_image import RecipeImage
 
-    existing_res = await db.execute(
-        select(RecipeImage).where(RecipeImage.recipe_id == recipe.id)
-    )
+    existing_res = await db.execute(select(RecipeImage).where(RecipeImage.recipe_id == recipe.id))
     existing = {img.full_url: img for img in existing_res.scalars().all()}
 
     new_set = set(new_full_urls)
@@ -467,10 +463,14 @@ def _apply_filters(
     "exclude foo" → recipe must match none. Each item is expanded via
     morphological word-forms before matching.
     """
+    from collections.abc import Iterable
+
+    from sqlalchemy.sql.elements import ColumnElement
+
     from app.models.recipe.ingredient import Ingredient
     from app.models.recipe.recipe_ingredient import RecipeIngredient
 
-    def _ingredient_name_matches_any(terms: list[str]):
+    def _ingredient_name_matches_any(terms: Iterable[str]) -> ColumnElement[bool]:
         # Case-insensitive `\yterm\y` regex (POSIX word boundary) OR-list.
         clauses = [Ingredient.name.op("~*")(rf"\y{re.escape(t)}\y") for t in terms]
         return or_(*clauses)
@@ -645,6 +645,7 @@ async def create_recipe(
     status = "approved" if current_user.role in ("moderator", "admin") else "pending"
 
     from app.services.recipe import cuisine_service
+
     cuisine_obj = await cuisine_service.get_or_create_by_name(db, name=recipe_in.cuisine)
 
     db_recipe = Recipe(
@@ -673,6 +674,7 @@ async def create_recipe(
         )
 
     from app.services.notification import notification_service
+
     # Notify moderators/admins about new pending recipe
     if db_recipe.status == "pending":
         mod_query = select(User.id).where(
@@ -696,8 +698,13 @@ async def create_recipe(
     # Notify followers when admin/mod publishes a recipe directly (status=approved)
     if db_recipe.status == "approved":
         from app.services.social import follow_service
-        follower_ids = await follow_service.get_follower_ids(db, user_id=db_recipe.owner_id)
-        follower_ids.discard(db_recipe.owner_id)
+
+        # owner_id is non-nullable (set in this function before commit); narrow
+        # for mypy. Asserting beats sprinkling `# type: ignore` on each use.
+        owner_id = db_recipe.owner_id
+        assert owner_id is not None
+        follower_ids = await follow_service.get_follower_ids(db, user_id=owner_id)
+        follower_ids.discard(owner_id)
         if follower_ids:
             # Fetch author username for the notification body
             owner_row = await db.execute(
@@ -878,13 +885,12 @@ async def get_recipe_for_caller(
 
     if current_user is not None and response.status == "approved":
         from app.services.recipe import rating_service
+
         favorited, user_rating_row = await asyncio.gather(
             favorite_service.get_favorited_recipe_ids(
                 db, user_id=current_user.id, recipe_ids=[recipe_id]
             ),
-            rating_service.get_user_rating(
-                db, user_id=current_user.id, recipe_id=recipe_id
-            ),
+            rating_service.get_user_rating(db, user_id=current_user.id, recipe_id=recipe_id),
         )
         # Fresh copy so we don't mutate the cached instance.
         response = response.model_copy(
@@ -970,9 +976,7 @@ async def _update_recipe_directly(
 
     if "image_urls" in update_data:
         raw_urls = update_data.pop("image_urls")
-        new_urls_list: list[str] = (
-            [str(url) for url in raw_urls] if raw_urls else []
-        )
+        new_urls_list: list[str] = [str(url) for url in raw_urls] if raw_urls else []
         # Apply via the normalised recipe_images table — keeps the survivors,
         # drops the removed ones (and their S3 objects), reorders by the new
         # client-supplied sequence.
@@ -984,6 +988,7 @@ async def _update_recipe_directly(
 
     if "cuisine" in update_data:
         from app.services.recipe import cuisine_service
+
         new_cuisine_name = update_data.pop("cuisine")
         cuisine_obj = await cuisine_service.get_or_create_by_name(db, name=new_cuisine_name)
         db_recipe.cuisine_id = cuisine_obj.id if cuisine_obj else None
@@ -1091,6 +1096,7 @@ async def resubmit_recipe(
 
     if "cuisine" in update_data:
         from app.services.recipe import cuisine_service
+
         cuisine_obj = await cuisine_service.get_or_create_by_name(
             db, name=update_data.pop("cuisine")
         )
@@ -1099,7 +1105,7 @@ async def resubmit_recipe(
     for field, value in update_data.items():
         setattr(db_recipe, field, value)
 
-    db_recipe.status = "pending"
+    db_recipe.status = RecipeStatus.PENDING
     db_recipe.rejection_reason = None
 
     db.add(db_recipe)
@@ -1113,6 +1119,7 @@ async def resubmit_recipe(
 
     # Notify moderators about re-submitted recipe
     from app.services.notification import notification_service
+
     mod_query = select(User.id).where(
         User.role.in_(["moderator", "admin"]),
         User.is_active == True,  # noqa: E712
@@ -1162,6 +1169,7 @@ async def delete_recipe(
 
     if is_mod_delete and owner_id is not None:
         from app.services.notification import notification_service
+
         await notification_service.notify_and_broadcast(
             db,
             user_id=owner_id,
@@ -1286,6 +1294,7 @@ async def search_recipes_by_vector(
     cache: Cache | None = None,
 ) -> list[Recipe]:
     from app.services.recipe import tag_service
+
     # Read all three caches in parallel to minimise Redis round-trips.
     cached_pairs: list[tuple[int, float]] | None = None
     cached_rewrite: str | None = None  # None=miss, ""=no rewrite, text=rewritten

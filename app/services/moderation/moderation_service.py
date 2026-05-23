@@ -14,13 +14,14 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.vector_store import vector_store
+from app.models._base.enums import DraftStatus, RecipeStatus
 from app.models.recipe.recipe import Recipe
 from app.models.recipe.recipe_draft import RecipeDraft
-from app.services.recipe import cache_keys
 from app.services.moderation import moderation_log_service
 from app.services.notification import notification_service
-from app.services.recipe import search_cache
-from app.services.recipe import similar_cache
+from app.services.recipe import cache_keys, search_cache, similar_cache
+
+
 async def get_pending_recipes(db: AsyncSession) -> Sequence[Recipe]:
     query = (
         select(Recipe)
@@ -50,10 +51,10 @@ async def get_pending_counts(db: AsyncSession) -> dict[str, int]:
     recipe_q = select(sa_func.count(Recipe.id)).where(Recipe.status == "pending")
     draft_q = select(sa_func.count(RecipeDraft.id)).where(RecipeDraft.status == "pending")
     # Count distinct comments that have at least one report and aren't deleted
-    comment_report_q = select(
-        sa_func.count(distinct(RecipeCommentReport.comment_id))
-    ).join(RecipeComment, RecipeComment.id == RecipeCommentReport.comment_id).where(
-        RecipeComment.is_deleted.is_(False)
+    comment_report_q = (
+        select(sa_func.count(distinct(RecipeCommentReport.comment_id)))
+        .join(RecipeComment, RecipeComment.id == RecipeCommentReport.comment_id)
+        .where(RecipeComment.is_deleted.is_(False))
     )
 
     recipe_result = await db.execute(recipe_q)
@@ -157,7 +158,7 @@ async def moderate_recipe(
         raise InvalidStateError(f"Recipe is already '{recipe.status}', not pending")
 
     if action == "approve":
-        recipe.status = "approved"
+        recipe.status = RecipeStatus.APPROVED
         recipe.rejection_reason = None
 
         text, meta = _create_semantic_document(recipe)
@@ -168,7 +169,7 @@ async def moderate_recipe(
             metadata=meta,
         )
     elif action == "reject":
-        recipe.status = "rejected"
+        recipe.status = RecipeStatus.REJECTED
         recipe.rejection_reason = rejection_reason
 
         try:
@@ -209,8 +210,8 @@ async def moderate_recipe(
 
     # Notify followers when recipe is approved
     if action == "approve" and recipe.owner_id is not None:
-        from app.services.social import follow_service
         from app.models.auth.user import User as _User2
+        from app.services.social import follow_service
 
         follower_ids = await follow_service.get_follower_ids(db, user_id=recipe.owner_id)
         follower_ids.discard(recipe.owner_id)
@@ -267,7 +268,7 @@ async def moderate_draft(
         recipe = recipe_result.scalar_one_or_none()
 
         if recipe is None:
-            draft.status = "rejected"
+            draft.status = DraftStatus.REJECTED
             draft.rejection_reason = "Original recipe no longer exists"
             db.add(draft)
             await db.commit()
@@ -275,8 +276,8 @@ async def moderate_draft(
             return draft
 
         from app.services.recipe import cuisine_service
-
         from app.services.recipe import recipe_service as _recipe_svc
+
         recipe.title = draft.title
         recipe.instructions = draft.instructions
         recipe.cooking_time_in_minutes = draft.cooking_time_in_minutes
@@ -285,9 +286,7 @@ async def moderate_draft(
         recipe.cuisine_id = cuisine_obj.id if cuisine_obj else None
         # draft.ingredients is still JSONB; extract names for the M2M rebuild.
         draft_ingredient_names = [
-            (item.get("name") or "")
-            for item in (draft.ingredients or [])
-            if item.get("name")
+            (item.get("name") or "") for item in (draft.ingredients or []) if item.get("name")
         ]
         await _recipe_svc._set_recipe_ingredients(db, recipe, draft_ingredient_names)
         db.add(recipe)
@@ -304,11 +303,11 @@ async def moderate_draft(
             metadata=meta,
         )
 
-        draft.status = "approved"
+        draft.status = DraftStatus.APPROVED
         db.add(draft)
 
     elif action == "reject":
-        draft.status = "rejected"
+        draft.status = DraftStatus.REJECTED
         draft.rejection_reason = rejection_reason
         db.add(draft)
 
@@ -343,8 +342,8 @@ async def moderate_draft(
 
     # Notify followers when draft is approved (recipe goes live)
     if action == "approve" and draft.recipe_id is not None:
-        from app.services.social import follow_service
         from app.models.auth.user import User as _User3
+        from app.services.social import follow_service
 
         follower_ids = await follow_service.get_follower_ids(db, user_id=draft.author_id)
         follower_ids.discard(draft.author_id)
