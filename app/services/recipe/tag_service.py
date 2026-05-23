@@ -23,9 +23,67 @@ from typing import Any
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from app.models._base.enums import (
+    CookingMethod,
+    CostTier,
+    MainProtein,
+    MealType,
+    Occasion,
+    SpiceLevel,
+    TechniqueDifficulty,
+)
+
 log = logging.getLogger(__name__)
 
 _FAL_APP = "openrouter/router"
+
+# Valid domains for each enum-backed tag field. The LLM occasionally returns
+# values outside the schema (e.g. "meat" instead of one of beef/pork/chicken/...);
+# any field listed here is silently dropped if the value is out of domain.
+# Boolean fields (vegetarian, vegan, …) and free-text (cultural_sub_region,
+# allergens, source) are NOT enum-backed and pass through untouched.
+_ENUM_TAG_DOMAINS: dict[str, frozenset[str]] = {
+    "meal_type": frozenset(e.value for e in MealType),
+    "main_protein": frozenset(e.value for e in MainProtein),
+    "cooking_method": frozenset(e.value for e in CookingMethod),
+    "spice_level": frozenset(e.value for e in SpiceLevel),
+    "occasion": frozenset(e.value for e in Occasion),
+    "cost_tier": frozenset(e.value for e in CostTier),
+    "technique_difficulty": frozenset(e.value for e in TechniqueDifficulty),
+}
+
+
+def _sanitize_tag_domains(tags: dict[str, Any]) -> dict[str, Any]:
+    """Drop enum-backed tag values that fall outside the schema.
+
+    The LLM is prompted with valid values but doesn't always comply
+    (e.g. returns "meat" for main_protein, "any" for meal_type). Passing
+    these to the DB raises InvalidTextRepresentationError on the enum cast.
+    """
+    out = dict(tags)
+    for field, domain in _ENUM_TAG_DOMAINS.items():
+        if field not in out:
+            continue
+        value = out[field]
+        if value is None:
+            continue
+        if isinstance(value, list):
+            # in_(…) form — keep only valid values; drop the field if all bad
+            filtered = [v for v in value if isinstance(v, str) and v in domain]
+            if filtered:
+                out[field] = filtered
+            else:
+                out.pop(field)
+        elif isinstance(value, str) and value in domain:
+            continue
+        else:
+            log.debug(
+                "tag_service: dropping out-of-domain value %r for %s",
+                value,
+                field,
+            )
+            out.pop(field)
+    return out
 
 
 def _get_llm_model() -> str:
@@ -197,6 +255,9 @@ async def classify_recipe_tags(recipe_id: int) -> None:
             )
 
             tags_data = await _classify_with_retry(prompt)
+            # Drop enum-backed values that fall outside the schema (LLM drift).
+            # Without this an INSERT into recipe_tags blows up on the enum cast.
+            tags_data = _sanitize_tag_domains(tags_data)
             tags_data["source"] = "llm"
             tags_data["recipe_id"] = recipe_id
 
@@ -302,7 +363,7 @@ async def parse_query_intent(query: str) -> dict[str, Any] | None:
         # Validate it's a dict (not a list or primitive)
         if not isinstance(result, dict):
             return {}
-        return result
+        return _sanitize_tag_domains(result)
     except asyncio.TimeoutError:
         log.debug("tag_service: parse_query_intent timed out for %r", query)
         return None
