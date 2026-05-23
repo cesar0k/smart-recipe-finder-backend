@@ -92,10 +92,7 @@ class Recipe(Base):
     @property
     def ingredients(self) -> list[dict[str, str | None]]:
         try:
-            return [
-                {"name": ri.ingredient.name, "amount": ri.amount, "unit": ri.unit}
-                for ri in self.recipe_ingredients
-            ]
+            return [{"name": ri.ingredient.name} for ri in self.recipe_ingredients]
         except Exception:
             return []
 
