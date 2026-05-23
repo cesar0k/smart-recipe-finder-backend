@@ -43,7 +43,14 @@ async def _load_recipe_with_relations(db: AsyncSession, *, recipe_id: int) -> Re
     result = await db.execute(
         select(Recipe)
         .where(Recipe.id == recipe_id)
-        .options(selectinload(Recipe.owner), selectinload(Recipe.tags))
+        .options(
+            selectinload(Recipe.owner),
+            selectinload(Recipe.tags),
+            # Recipe.image_urls / thumbnail_urls are computed from the images
+            # relationship — without eager-loading the properties silently
+            # return [] (lazy="raise"/"noload"), and cards show no preview.
+            selectinload(Recipe.images),
+        )
     )
     return result.scalar_one_or_none()
 
@@ -144,7 +151,14 @@ async def get_user_favorites(
             RecipeFavorite.user_id == user_id,
             Recipe.status == "approved",
         )
-        .options(selectinload(Recipe.owner), selectinload(Recipe.tags))
+        .options(
+            selectinload(Recipe.owner),
+            selectinload(Recipe.tags),
+            # Recipe.image_urls / thumbnail_urls are computed from the images
+            # relationship — without eager-loading the properties silently
+            # return [] (lazy="raise"/"noload"), and cards show no preview.
+            selectinload(Recipe.images),
+        )
         .order_by(RecipeFavorite.created_at.desc(), Recipe.id.desc())
         .offset(skip)
         .limit(limit)
