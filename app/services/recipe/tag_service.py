@@ -245,7 +245,7 @@ async def classify_recipe_tags(recipe_id: int) -> None:
                 log.warning("tag_service: recipe %d not found, skipping", recipe_id)
                 return
 
-            ingredients = ", ".join(item.get("name", "") for item in (recipe.ingredients or []))
+            ingredients = ", ".join((item.get("name") or "") for item in (recipe.ingredients or []))
             prompt = (
                 f"Title: {recipe.title}\n"
                 f"Description: {recipe.description or ''}\n"

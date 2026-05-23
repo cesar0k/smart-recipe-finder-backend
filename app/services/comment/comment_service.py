@@ -19,13 +19,11 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.models import Recipe
+from app.models.auth.user import User
 from app.models.comment.recipe_comment import RecipeComment
 from app.models.comment.recipe_comment_report import RecipeCommentReport
-from app.models.auth.user import User
 from app.schemas.comment.comment import CommentResponse
-from app.services.recipe import cache_keys
-from app.services.recipe import search_cache
-from app.services.recipe import similar_cache
+from app.services.recipe import cache_keys, search_cache, similar_cache
 from app.services.recipe.rating_service import recompute_engagement_score
 
 log = logging.getLogger(__name__)
@@ -47,17 +45,22 @@ async def _recompute_comments_count(db: AsyncSession, *, recipe_id: int) -> None
         RecipeComment.is_deleted.is_(False),
     )
     new_count = (await db.execute(count_q)).scalar_one()
-    await db.execute(
-        update(Recipe).where(Recipe.id == recipe_id).values(comments_count=new_count)
-    )
+    await db.execute(update(Recipe).where(Recipe.id == recipe_id).values(comments_count=new_count))
     await recompute_engagement_score(db, recipe_id=recipe_id)
 
 
 def _user_role(user: object) -> str | None:
-    """Return 'admin' | 'moderator' | None based on user.role."""
+    """Return 'admin' | 'moderator' | None based on user.role.
+
+    `role` may be a UserRole enum or a raw string depending on the call site —
+    cast to str so the comparison and return type are stable.
+    """
     role = getattr(user, "role", None)
-    if role in ("admin", "moderator"):
-        return role
+    if role is None:
+        return None
+    role_str = str(role.value) if hasattr(role, "value") else str(role)
+    if role_str in ("admin", "moderator"):
+        return role_str
     return None
 
 
@@ -214,6 +217,7 @@ async def create_comment(
 
     # Notifications
     from app.services.notification import notification_service
+
     if parent_comment_id is None:
         # Notify recipe owner about new top-level comment (skip if self-comment)
         if recipe.owner_id is not None and recipe.owner_id != user.id:
@@ -336,6 +340,7 @@ async def report_comment(
 
     from app.models.auth.user import User as _User
     from app.services.notification import notification_service
+
     mod_result = await db.execute(
         fut_select(_User.id).where(
             _User.role.in_(["moderator", "admin"]),
@@ -445,32 +450,34 @@ async def get_reported_comments(
                 reporter_username = rep.reporter.username if rep.reporter else None
             except Exception:
                 reporter_username = None
-            reports_data.append({
-                "reporter_id": rep.reporter_id,
-                "reporter_username": reporter_username,
-                "reason": rep.reason,
-                "created_at": rep.created_at,
-            })
+            reports_data.append(
+                {
+                    "reporter_id": rep.reporter_id,
+                    "reporter_username": reporter_username,
+                    "reason": rep.reason,
+                    "created_at": rep.created_at,
+                }
+            )
 
-        result_list.append({
-            "comment_id": comment.id,
-            "recipe_id": comment.recipe_id,
-            "recipe_title": recipe_map.get(comment.recipe_id, ""),
-            "content": comment.content,
-            "is_deleted": comment.is_deleted,
-            "author_id": comment.user_id,
-            "author_username": author_username,
-            "created_at": comment.created_at,
-            "parent_comment_id": comment.parent_comment_id,
-            "parent_content": parent.content if parent else None,
-            "parent_author_username": (
-                parent.user.username
-                if parent and not parent.is_deleted
-                else None
-            ),
-            "report_count": len(comment_reports),
-            "reports": reports_data,
-        })
+        result_list.append(
+            {
+                "comment_id": comment.id,
+                "recipe_id": comment.recipe_id,
+                "recipe_title": recipe_map.get(comment.recipe_id, ""),
+                "content": comment.content,
+                "is_deleted": comment.is_deleted,
+                "author_id": comment.user_id,
+                "author_username": author_username,
+                "created_at": comment.created_at,
+                "parent_comment_id": comment.parent_comment_id,
+                "parent_content": parent.content if parent else None,
+                "parent_author_username": (
+                    parent.user.username if parent and not parent.is_deleted else None
+                ),
+                "report_count": len(comment_reports),
+                "reports": reports_data,
+            }
+        )
 
     return result_list
 
@@ -483,9 +490,7 @@ async def dismiss_comment_reports(
     """Delete all reports for a comment without deleting the comment itself."""
     from app.models.comment.recipe_comment_report import RecipeCommentReport
 
-    result = await db.execute(
-        select(RecipeComment).where(RecipeComment.id == comment_id)
-    )
+    result = await db.execute(select(RecipeComment).where(RecipeComment.id == comment_id))
     if result.scalar_one_or_none() is None:
         raise NotFoundError("Comment not found")
 

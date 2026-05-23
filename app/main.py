@@ -68,7 +68,7 @@ app = FastAPI(
 # in Redis so multiple uvicorn workers share the same bucket; per-route stricter
 # limits (auth endpoints) are layered on top via @limiter.limit decorators.
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 app.add_middleware(SlowAPIMiddleware)
 
 # Reject requests with a Host header outside the allow-list. Only enforced

@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.config import settings
-from app.models.notification.email_notification_preference import EmailNotificationPreference
 from app.models.auth.user import User
+from app.models.notification.email_notification_preference import EmailNotificationPreference
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,7 @@ def _get_strings(notification_type: str, lang: str) -> tuple[str, str, str]:
         return strings.get(lang, strings["ru"])
     return _FALLBACK_STRINGS.get(lang, _FALLBACK_STRINGS["ru"])
 
+
 # Low-level SMTP send
 async def send_email(to_email: str, subject: str, html_body: str) -> bool:
     """Send an HTML email via SMTP.
@@ -139,7 +140,10 @@ def _base_template(title: str, body_html: str, cta_url: str = "", cta_text: str 
 
     return f"""<!DOCTYPE html>
 <html lang="ru">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,
              'Segoe UI',sans-serif;color:#111827;">
   <table width="100%" cellpadding="0" cellspacing="0">
@@ -187,8 +191,7 @@ _TRANSACTIONAL: dict[str, dict[str, dict[str, str]]] = {
             "title": "Подтвердите ваш email",
             "greeting": "Здравствуйте",
             "body": (
-                "Подтвердите ваш email-адрес, нажав на кнопку ниже. "
-                "Ссылка действительна {hours} ч."
+                "Подтвердите ваш email-адрес, нажав на кнопку ниже. Ссылка действительна {hours} ч."
             ),
             "fallback": "Если кнопка не работает, скопируйте ссылку: {url}",
             "cta": "Подтвердить email",
@@ -226,8 +229,7 @@ _TRANSACTIONAL: dict[str, dict[str, dict[str, str]]] = {
             "ignore": "Если вы не запрашивали смену email — проигнорируйте это письмо.",
             "cta": "Подтвердить новый email",
             "footer": (
-                "Smart Recipe Finder — вы получили это письмо, потому что "
-                "связаны с этим сервисом."
+                "Smart Recipe Finder — вы получили это письмо, потому что связаны с этим сервисом."
             ),
         },
         "en": {
@@ -260,8 +262,7 @@ _TRANSACTIONAL: dict[str, dict[str, dict[str, str]]] = {
             "fallback": "Если кнопка не работает, скопируйте ссылку: {url}",
             "cta": "Сбросить пароль",
             "footer": (
-                "Smart Recipe Finder — вы получили это письмо, потому что "
-                "связаны с этим сервисом."
+                "Smart Recipe Finder — вы получили это письмо, потому что связаны с этим сервисом."
             ),
         },
         "en": {
@@ -284,13 +285,6 @@ _TRANSACTIONAL: dict[str, dict[str, dict[str, str]]] = {
 }
 
 
-def _t(key: str, lang: str, **kwargs: str) -> str:
-    """Get a localised transactional string and format it."""
-    lang = lang if lang in ("ru", "en") else "ru"
-    tmpl = _TRANSACTIONAL[key][lang]
-    return tmpl.format(**kwargs) if kwargs else tmpl  # type: ignore[return-value]
-
-
 async def send_verification_email(user: User, token: str) -> None:
     """Send email verification link. token is the raw (un-hashed) token."""
     lang = getattr(user, "language", "ru") or "ru"
@@ -298,17 +292,15 @@ async def send_verification_email(user: User, token: str) -> None:
     s = _TRANSACTIONAL["verify"][lang if lang in ("ru", "en") else "ru"]
     body = f"""
     <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">
-      {s['greeting']}, <strong>{user.display_name or user.username}</strong>!
+      {s["greeting"]}, <strong>{user.display_name or user.username}</strong>!
     </p>
     <p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 8px;">
-      {s['body'].format(hours=settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS)}
+      {s["body"].format(hours=settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS)}
     </p>
     <p style="font-size:13px;color:#6b7280;margin:0;">
-      {s['fallback'].format(url=f'<a href="{verify_url}">{verify_url}</a>')}
+      {s["fallback"].format(url=f'<a href="{verify_url}">{verify_url}</a>')}
     </p>"""
-    html = _base_template(
-        title=s["title"], body_html=body, cta_url=verify_url, cta_text=s["cta"]
-    )
+    html = _base_template(title=s["title"], body_html=body, cta_url=verify_url, cta_text=s["cta"])
     await send_email(user.email, f"{s['subject']} — Smart Recipe Finder", html)
 
 
@@ -319,17 +311,15 @@ async def send_email_change_confirmation(user: User, token: str, new_email: str)
     s = _TRANSACTIONAL["email_change"][lang if lang in ("ru", "en") else "ru"]
     body = f"""
     <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">
-      {s['greeting']}, <strong>{user.display_name or user.username}</strong>!
+      {s["greeting"]}, <strong>{user.display_name or user.username}</strong>!
     </p>
     <p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 8px;">
-      {s['body'].format(new_email=new_email, hours=settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS)}
+      {s["body"].format(new_email=new_email, hours=settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS)}
     </p>
     <p style="font-size:13px;color:#6b7280;margin:0;">
-      {s['ignore']}
+      {s["ignore"]}
     </p>"""
-    html = _base_template(
-        title=s["title"], body_html=body, cta_url=confirm_url, cta_text=s["cta"]
-    )
+    html = _base_template(title=s["title"], body_html=body, cta_url=confirm_url, cta_text=s["cta"])
     await send_email(new_email, f"{s['subject']} — Smart Recipe Finder", html)
 
 
@@ -340,20 +330,18 @@ async def send_password_reset_email(user: User, token: str) -> None:
     s = _TRANSACTIONAL["reset"][lang if lang in ("ru", "en") else "ru"]
     body = f"""
     <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">
-      {s['greeting']}, <strong>{user.display_name or user.username}</strong>!
+      {s["greeting"]}, <strong>{user.display_name or user.username}</strong>!
     </p>
     <p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 8px;">
-      {s['body'].format(hours=settings.PASSWORD_RESET_TOKEN_EXPIRE_HOURS)}
+      {s["body"].format(hours=settings.PASSWORD_RESET_TOKEN_EXPIRE_HOURS)}
     </p>
     <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">
-      {s['ignore']}
+      {s["ignore"]}
     </p>
     <p style="font-size:13px;color:#6b7280;margin:0;">
-      {s['fallback'].format(url=f'<a href="{reset_url}">{reset_url}</a>')}
+      {s["fallback"].format(url=f'<a href="{reset_url}">{reset_url}</a>')}
     </p>"""
-    html = _base_template(
-        title=s["title"], body_html=body, cta_url=reset_url, cta_text=s["cta"]
-    )
+    html = _base_template(title=s["title"], body_html=body, cta_url=reset_url, cta_text=s["cta"])
     await send_email(user.email, f"{s['subject']} — Smart Recipe Finder", html)
 
 
@@ -422,68 +410,68 @@ def _build_notification_body(notification_type: str, message: str, lang: str) ->
     if notification_type == "user_followed":
         return (
             f"Пользователь <strong>@{name}</strong> подписался на вас."
-            if ru else
-            f"<strong>@{name}</strong> started following you."
+            if ru
+            else f"<strong>@{name}</strong> started following you."
         )
     if notification_type == "followed_user_published":
         return (
             f"Автор <strong>{name}</strong> опубликовал новый рецепт."
-            if ru else
-            f"<strong>{name}</strong> published a new recipe."
+            if ru
+            else f"<strong>{name}</strong> published a new recipe."
         )
     if notification_type == "new_comment":
         return (
             f"Кто-то оставил комментарий к вашему рецепту «<strong>{name}</strong>»."
-            if ru else
-            f"Someone commented on your recipe «<strong>{name}</strong>»."
+            if ru
+            else f"Someone commented on your recipe «<strong>{name}</strong>»."
         )
     if notification_type == "comment_reply":
         return (
             f"Вам ответили в обсуждении рецепта «<strong>{name}</strong>»."
-            if ru else
-            f"Someone replied to your comment on «<strong>{name}</strong>»."
+            if ru
+            else f"Someone replied to your comment on «<strong>{name}</strong>»."
         )
     if notification_type == "comment_reported":
         return (
             f"Поступила жалоба на комментарий к рецепту «<strong>{name}</strong>»."
-            if ru else
-            f"A comment on «<strong>{name}</strong>» has been reported."
+            if ru
+            else f"A comment on «<strong>{name}</strong>» has been reported."
         )
     if notification_type == "new_pending_recipe":
         return (
             f"Рецепт «<strong>{name}</strong>» ожидает модерации."
-            if ru else
-            f"Recipe «<strong>{name}</strong>» is waiting for moderation."
+            if ru
+            else f"Recipe «<strong>{name}</strong>» is waiting for moderation."
         )
     if notification_type == "recipe_approved":
         return (
             f"Ваш рецепт «<strong>{name}</strong>» прошёл модерацию и опубликован."
-            if ru else
-            f"Your recipe «<strong>{name}</strong>» has been approved and published."
+            if ru
+            else f"Your recipe «<strong>{name}</strong>» has been approved and published."
         )
     if notification_type == "recipe_rejected":
         return (
             f"К сожалению, рецепт «<strong>{name}</strong>» не прошёл модерацию."
-            if ru else
-            f"Unfortunately, your recipe «<strong>{name}</strong>» was not approved."
+            if ru
+            else f"Unfortunately, your recipe «<strong>{name}</strong>» was not approved."
         )
     if notification_type == "draft_approved":
         return (
             f"Изменения в рецепте «<strong>{name}</strong>» одобрены."
-            if ru else
-            f"Your edits to «<strong>{name}</strong>» have been approved."
+            if ru
+            else f"Your edits to «<strong>{name}</strong>» have been approved."
         )
     if notification_type == "draft_rejected":
         return (
             f"Изменения в рецепте «<strong>{name}</strong>» отклонены."
-            if ru else
-            f"Your edits to «<strong>{name}</strong>» were not approved."
+            if ru
+            else f"Your edits to «<strong>{name}</strong>» were not approved."
         )
     if notification_type == "recipe_deleted":
         return (
             f"Рецепт «<strong>{name}</strong>» был удалён модератором."
-            if ru else
-            f"Your recipe «<strong>{name}</strong>» was removed by a moderator."
+            if ru
+            else f"Your recipe «<strong>{name}</strong>» was removed by a moderator."
         )
     # Fallback — use raw message
     return name

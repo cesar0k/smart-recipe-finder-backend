@@ -19,6 +19,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.models._base.enums import UserLanguage
 from app.models.auth.refresh_token import RefreshToken
 from app.models.auth.user import User
 from app.services.recipe import cache_keys
@@ -218,7 +219,7 @@ async def update_user_profile(
         user.display_name = display_name
 
     if language is not None:
-        user.language = language
+        user.language = UserLanguage(language)
 
     if username is not None and username != user.username:
         existing = await get_user_by_username(db, username=username)
@@ -328,17 +329,13 @@ async def verify_email_token(db: AsyncSession, *, token: str) -> User:
     hashed = _hash_token(token)
 
     # Check if this is a pending-email-change token first
-    result = await db.execute(
-        select(User).where(User.pending_email_token == hashed)
-    )
+    result = await db.execute(select(User).where(User.pending_email_token == hashed))
     user = result.scalar_one_or_none()
     if user is not None:
         return await _apply_pending_email(db, user)
 
     # Regular email verification token
-    result = await db.execute(
-        select(User).where(User.email_verification_token == hashed)
-    )
+    result = await db.execute(select(User).where(User.email_verification_token == hashed))
     user = result.scalar_one_or_none()
     if user is None:
         raise ValidationError("invalid_verification_token")
@@ -439,9 +436,7 @@ async def reset_password(db: AsyncSession, *, token: str, new_password: str) -> 
     Raises ValidationError on invalid / expired token.
     """
     hashed = _hash_token(token)
-    result = await db.execute(
-        select(User).where(User.password_reset_token == hashed)
-    )
+    result = await db.execute(select(User).where(User.password_reset_token == hashed))
     user = result.scalar_one_or_none()
     if user is None:
         raise ValidationError("invalid_reset_token")

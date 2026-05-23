@@ -26,11 +26,12 @@ from app.core.exceptions import (
 )
 from app.core.s3_client import s3_client
 from app.db.session import AsyncSessionLocal
-from app.models.recipe.recipe import Recipe
+from app.models._base.enums import UserRole
 from app.models.auth.refresh_token import RefreshToken
 from app.models.auth.user import User
-from app.services.recipe import cache_keys
-from app.services.recipe import image_service
+from app.models.recipe.recipe import Recipe
+from app.services.recipe import cache_keys, image_service
+
 # Google-CDN avatar URL substrings — referenced by the backfill script too.
 GOOGLE_AVATAR_DOMAINS: tuple[str, ...] = ("googleusercontent.com", "googleapis.com")
 
@@ -94,7 +95,7 @@ async def update_user(
     _ensure_admin_can_modify(db_user, admin)
 
     if role is not None:
-        db_user.role = role
+        db_user.role = UserRole(role)
     if is_active is not None:
         db_user.is_active = is_active
 
@@ -239,9 +240,7 @@ async def get_public_profile_cached(
             if viewer_user_id and viewer_user_id != user_id:
                 from app.services.social.follow_service import is_following as _is_following
 
-                following = await _is_following(
-                    db, follower_id=viewer_user_id, followed_id=user_id
-                )
+                following = await _is_following(db, follower_id=viewer_user_id, followed_id=user_id)
                 return cached.model_copy(update={"is_following": following})
             return cached
 
@@ -257,9 +256,7 @@ async def get_public_profile_cached(
     if viewer_user_id and viewer_user_id != user_id:
         from app.services.social.follow_service import is_following as _is_following
 
-        following = await _is_following(
-            db, follower_id=viewer_user_id, followed_id=user_id
-        )
+        following = await _is_following(db, follower_id=viewer_user_id, followed_id=user_id)
         return response.model_copy(update={"is_following": following})
 
     return response
