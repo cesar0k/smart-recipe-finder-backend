@@ -505,9 +505,12 @@ def _apply_filters(
         query = query.where(Recipe.cooking_time_in_minutes <= max_time)
 
     if difficulty:
+        # Recipe.difficulty is a native recipe_difficulty enum — Postgres has no
+        # lower() for enums. Values are already stored lowercase, so we just
+        # normalize the incoming filter and compare directly.
         difficulties = [d.strip().lower() for d in difficulty.split(",") if d.strip()]
         if difficulties:
-            query = query.where(func.lower(Recipe.difficulty).in_(difficulties))
+            query = query.where(Recipe.difficulty.in_(difficulties))
 
     if cuisine:
         cuisines = [c.strip().lower() for c in cuisine.split(",") if c.strip()]
