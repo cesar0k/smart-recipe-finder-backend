@@ -1,17 +1,4 @@
-"""LLM-based recipe tag classification and query intent parsing.
-
-Two entry points:
-
-classify_recipe_tags(recipe_id)
-    Background task — called after recipe create/update.
-    Opens its own DB session, calls Gemini via fal.ai, upserts RecipeTags.
-    Graceful degradation: logs warning on failure, never raises.
-
-parse_query_intent(query)
-    Called inline during vector search.
-    Returns a tag filter dict (e.g. {"vegetarian": True}) or {} / None on error.
-    Hard 3-second timeout to avoid blocking search.
-"""
+"""LLM-based recipe tag classification and query intent parsing."""
 
 from __future__ import annotations
 

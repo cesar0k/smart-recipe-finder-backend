@@ -156,8 +156,12 @@ async def _set_recipe_images(db: AsyncSession, recipe: Recipe, new_full_urls: li
 
     for idx, full_url in enumerate(new_full_urls):
         if full_url in existing:
+            # Already-persistent row: assigning `.position` is enough; the
+            # session tracks the change. Calling db.add() on a persistent
+            # instance is a no-op for the INSERT path but re-runs the
+            # save-update cascade, which conflicts with the sibling rows
+            # we just marked deleted in the loop above.
             existing[full_url].position = idx
-            db.add(existing[full_url])
         else:
             db.add(
                 RecipeImage(
@@ -996,7 +1000,6 @@ async def _update_recipe_directly(
     for field, value in update_data.items():
         setattr(db_recipe, field, value)
 
-    db.add(db_recipe)
     if new_ingredient_names is not None:
         await _set_recipe_ingredients(db, db_recipe, new_ingredient_names)
     await db.commit()
@@ -1108,7 +1111,8 @@ async def resubmit_recipe(
     db_recipe.status = RecipeStatus.PENDING
     db_recipe.rejection_reason = None
 
-    db.add(db_recipe)
+    # db_recipe is already persistent — see _update_recipe_directly for why
+    # we don't call db.add() on it.
     if new_ingredient_names is not None:
         await _set_recipe_ingredients(db, db_recipe, new_ingredient_names)
     await db.commit()
