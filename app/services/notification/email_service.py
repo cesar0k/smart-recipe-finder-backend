@@ -87,11 +87,7 @@ def _get_strings(notification_type: str, lang: str) -> tuple[str, str, str]:
 
 # Low-level SMTP send
 async def send_email(to_email: str, subject: str, html_body: str) -> bool:
-    """Send an HTML email via SMTP.
-
-    Returns False (and logs a warning) when emails are globally disabled or
-    SMTP is not configured. Never raises — callers should use create_task().
-    """
+    """Send an HTML email via SMTP."""
     if not settings.EMAILS_ENABLED:
         logger.debug("Emails disabled globally — skipping send to %s", to_email)
         return False

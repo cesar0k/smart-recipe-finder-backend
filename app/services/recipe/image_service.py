@@ -11,13 +11,7 @@ pillow_heif.register_heif_opener()
 
 
 def validate_image_bytes(content: bytes) -> bytes:
-    """Validate raw image bytes against project size / MIME / dimension limits.
-
-    Mirrors the rules enforced by ``validate_and_process_image`` so that
-    images sourced outside the FastAPI request lifecycle (e.g. a Google
-    avatar downloaded at registration) go through the exact same guardrails.
-    Returns the input bytes on success; raises HTTPException on failure.
-    """
+    """Validate raw image bytes against project size / MIME / dimension limits."""
     file_size: int = len(content)
 
     if file_size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:

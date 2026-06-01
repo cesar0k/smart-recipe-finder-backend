@@ -64,16 +64,10 @@ app = FastAPI(
     openapi_url=None if _IS_PROD else "/openapi.json",
 )
 
-# Wire up the SlowAPI limiter (defined in app.core.rate_limit). Counters live
-# in Redis so multiple uvicorn workers share the same bucket; per-route stricter
-# limits (auth endpoints) are layered on top via @limiter.limit decorators.
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 app.add_middleware(SlowAPIMiddleware)
 
-# Reject requests with a Host header outside the allow-list. Only enforced
-# in production; dev/test stays permissive so `localhost`, `127.0.0.1`, the
-# docker-compose service name etc. all work.
 if _IS_PROD:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 

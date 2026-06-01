@@ -24,11 +24,6 @@ log = logging.getLogger(__name__)
 
 _FAL_APP = "openrouter/router"
 
-# Valid domains for each enum-backed tag field. The LLM occasionally returns
-# values outside the schema (e.g. "meat" instead of one of beef/pork/chicken/...);
-# any field listed here is silently dropped if the value is out of domain.
-# Boolean fields (vegetarian, vegan, …) and free-text (cultural_sub_region,
-# allergens, source) are NOT enum-backed and pass through untouched.
 _ENUM_TAG_DOMAINS: dict[str, frozenset[str]] = {
     "meal_type": frozenset(e.value for e in MealType),
     "main_protein": frozenset(e.value for e in MainProtein),
@@ -41,12 +36,7 @@ _ENUM_TAG_DOMAINS: dict[str, frozenset[str]] = {
 
 
 def _sanitize_tag_domains(tags: dict[str, Any]) -> dict[str, Any]:
-    """Drop enum-backed tag values that fall outside the schema.
-
-    The LLM is prompted with valid values but doesn't always comply
-    (e.g. returns "meat" for main_protein, "any" for meal_type). Passing
-    these to the DB raises InvalidTextRepresentationError on the enum cast.
-    """
+    """Drop enum-backed tag values that fall outside the schema."""
     out = dict(tags)
     for field, domain in _ENUM_TAG_DOMAINS.items():
         if field not in out:

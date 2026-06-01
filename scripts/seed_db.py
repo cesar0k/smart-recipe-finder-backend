@@ -3,7 +3,6 @@ import asyncio
 import json
 import sys
 import uuid
-from io import BytesIO
 from pathlib import Path
 
 from sqlalchemy import delete
@@ -15,28 +14,34 @@ from sqlalchemy.future import select
 from app.core.s3_client import s3_client
 from app.core.vector_store import vector_store
 from app.db.session import AsyncSessionLocal
-from app.models.recipe.recipe import Recipe
 from app.models.auth.user import User
+from app.models.recipe.recipe import Recipe
 from app.schemas import RecipeCreate
-from app.services.recipe import recipe_service
+from app.services.recipe import image_service, recipe_service
 from app.services.recipe.tag_service import classify_recipe_tags
 
 DATASETS_PATH = Path(__file__).resolve().parents[1] / "datasets"
 RECIPE_PHOTOS_PATH = DATASETS_PATH / "recipe_photos"
 
+# Input extensions we'll pick up from datasets/recipe_photos/. Output is
+# always WebP (full + thumb), produced by image_service, regardless of the
+# source format — so no output MIME map is needed.
 PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-MIME_MAP = {
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".webp": "image/webp",
-}
 
 
-async def upload_local_photos(recipe_id: int, json_id: int) -> list[str]:
+async def upload_local_photos(recipe_id: int, json_id: int) -> list[tuple[str, str]]:
     """
     Upload photos from datasets/recipe_photos/{json_id}/ to Minio.
-    Returns list of uploaded URLs, or empty list if no local photos found.
+
+    Each photo is run through the SAME compression pipeline as user uploads
+    (image_service.generate_compressed_versions): a full-size WebP and a
+    thumbnail WebP are generated and stored separately. Previously seed
+    photos were uploaded byte-for-byte (full-res PNG/JPG, no thumbnail),
+    so they were far larger than user-uploaded photos and the thumbnail
+    column was just a copy of the full URL — breaking progressive loading.
+
+    Returns a list of (full_url, thumb_url) tuples, or an empty list if no
+    local photos are found.
     """
     photo_dir = RECIPE_PHOTOS_PATH / str(json_id)
 
@@ -50,19 +55,23 @@ async def upload_local_photos(recipe_id: int, json_id: int) -> list[str]:
     if not photo_files:
         return []
 
-    urls: list[str] = []
+    pairs: list[tuple[str, str]] = []
     for photo_path in photo_files:
-        ext = photo_path.suffix.lower()
-        content_type = MIME_MAP.get(ext, "application/octet-stream")
-        object_name = f"recipes/{recipe_id}/{uuid.uuid4()}{ext}"
-
         with open(photo_path, "rb") as f:
-            file_bytes = BytesIO(f.read())
+            original_bytes = f.read()
 
-        url = await s3_client.upload_file(file_bytes, object_name, content_type)
-        urls.append(url)
+        versions = image_service.generate_compressed_versions(original_bytes)
+        file_id = uuid.uuid4()
 
-    return urls
+        full_key = f"recipes/{recipe_id}/{file_id}.webp"
+        full_url = await s3_client.upload_file(versions["full"], full_key, "image/webp")
+
+        thumb_key = f"recipes/{recipe_id}/{file_id}_thumb.webp"
+        thumb_url = await s3_client.upload_file(versions["thumb"], thumb_key, "image/webp")
+
+        pairs.append((full_url, thumb_url))
+
+    return pairs
 
 
 async def seed(lang: str) -> None:
@@ -135,16 +144,15 @@ async def seed(lang: str) -> None:
                 db=db, recipe_in=recipe_in, current_user=admin_user
             )
 
-            # Try to upload local photos for this recipe
+            # Try to upload local photos for this recipe. upload_local_photos
+            # now compresses each image into full + thumbnail WebP (same as
+            # user uploads) and returns real (full_url, thumb_url) pairs.
             if has_photos_dir and json_id is not None:
-                uploaded_urls = await upload_local_photos(db_recipe.id, json_id)
-                if uploaded_urls:
-                    # Seed data doesn't ship thumbnails — reuse the full URL
-                    # as the thumbnail so the NOT NULL column is satisfied.
-                    pairs = [(u, u) for u in uploaded_urls]
+                pairs = await upload_local_photos(db_recipe.id, json_id)
+                if pairs:
                     await recipe_service._add_recipe_images(db, db_recipe, pairs)
                     await db.commit()
-                    print(f'   Uploaded {len(uploaded_urls)} photo(s) for "{db_recipe.title}"')
+                    print(f'   Uploaded {len(pairs)} photo(s) for "{db_recipe.title}"')
 
         print(f"Successfully inserted {len(recipes_data)} recipes.")
 

@@ -68,12 +68,7 @@ class VectorStore:
         return self._collection
 
     def _refresh_collection(self) -> Collection:
-        """Re-fetch collection from ChromaDB server, updating the cached UUID.
-
-        Called automatically when a NotFoundError is raised — this happens when
-        seed_db.py runs clear() in a separate process, creating a new collection
-        with a new UUID while this process still holds the old cached object.
-        """
+        """Re-fetch collection from ChromaDB server, updating the cached UUID."""
         self._collection = self.client.get_or_create_collection(name=self.collection_name)
         return self._collection
 
@@ -155,9 +150,7 @@ class VectorStore:
             flight_key, lambda: self._search_uncached(query, n_results)
         )
 
-    async def _search_uncached(
-        self, query: str, n_results: int
-    ) -> list[tuple[int, float]]:
+    async def _search_uncached(self, query: str, n_results: int) -> list[tuple[int, float]]:
         query_vec_result = await self.embed_query(query)
         query_embedding_list = query_vec_result.tolist()
 
