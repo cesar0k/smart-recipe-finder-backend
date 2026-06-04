@@ -41,6 +41,31 @@ class S3Client:
             logger.error(f"S3 file upload failed: {ex}")
             raise ex
 
+    async def download_file(self, object_name: str) -> bytes:
+        """Download an object's raw bytes by its key."""
+        try:
+            obj = await asyncio.to_thread(
+                self.client.get_object,
+                Bucket=settings.S3_BUCKET_NAME,
+                Key=object_name,
+            )
+            return cast(bytes, await asyncio.to_thread(obj["Body"].read))
+        except ClientError as ex:
+            logger.error(f"S3 file download failed: {ex}")
+            raise ex
+
+    def object_key_from_url(self, file_url: str) -> str | None:
+        """Extract the bucket-relative object key from a stored image URL.
+
+        URLs are stored as ``{S3_PUBLIC_ENDPOINT}/{bucket}/{key}``. Returns
+        the ``{key}`` part, or None if the URL doesn't point at our bucket.
+        """
+        parsed = urlparse(file_url)
+        path_parts = parsed.path.lstrip("/").split("/", 1)
+        if len(path_parts) == 2 and path_parts[0] == settings.S3_BUCKET_NAME:
+            return path_parts[1]
+        return None
+
     async def delete_file(self, object_name: str) -> None:
         try:
             await asyncio.to_thread(
@@ -54,23 +79,13 @@ class S3Client:
 
     async def delete_image_from_s3(self, file_url: str) -> None:
         try:
-            parsed = urlparse(file_url)
-            path_parts = parsed.path.lstrip("/").split("/", 1)
-
-            if len(path_parts) == 2 and path_parts[0] == settings.S3_BUCKET_NAME:
-                object_key = path_parts[1]
+            object_key = self.object_key_from_url(file_url)
+            if object_key is not None:
                 await self.delete_file(object_key)
-            else:
-                pass
         except Exception as ex:
             logger.error(f"S3 image delete failed: {ex}")
 
     async def clear_bucket(self) -> int:
-        """
-        Delete all objects in the bucket.
-        Uses paginated listing to handle buckets with more than 1000 objects.
-        Returns the total number of deleted objects.
-        """
         deleted_count = 0
         paginator = self.client.get_paginator("list_objects_v2")
 
