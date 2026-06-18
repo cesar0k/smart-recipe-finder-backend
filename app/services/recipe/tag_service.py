@@ -19,6 +19,7 @@ from app.models._base.enums import (
     SpiceLevel,
     TechniqueDifficulty,
 )
+from app.services.recipe import cache_keys
 
 log = logging.getLogger(__name__)
 
@@ -284,6 +285,18 @@ async def classify_recipe_tags(recipe_id: int) -> None:
 
             await db.commit()
             log.info("tag_service: classified tags for recipe %d (%s)", recipe_id, recipe.title)
+
+            try:
+                from app.core.cache import get_cache
+
+                cache = await get_cache()
+                await cache_keys.invalidate_on_recipe_change(cache, recipe_id=recipe_id)
+            except Exception as cache_exc:
+                log.warning(
+                    "tag_service: failed to invalidate recipe caches for recipe %d: %s",
+                    recipe_id,
+                    cache_exc,
+                )
 
             # Re-index the embedding now that tags are available.
             # The document text includes tag keywords (vegetarian, soup, etc.) which

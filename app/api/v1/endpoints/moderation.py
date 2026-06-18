@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
@@ -9,8 +9,9 @@ from app.core.cache import Cache, get_cache
 from app.db.session import get_db
 from app.models.auth.user import User
 from app.services.comment import comment_service
-from app.services.moderation import moderation_log_service
-from app.services.moderation import moderation_service
+from app.services.moderation import moderation_log_service, moderation_service
+from app.services.recipe import tag_service
+
 router = APIRouter()
 
 
@@ -99,6 +100,7 @@ async def moderate_recipe(
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[Cache, Depends(get_cache)],
     mod: Annotated[User, Depends(require_moderator)],
+    background_tasks: BackgroundTasks,
     recipe_id: int,
     body: schemas.ModerationAction,
 ) -> schemas.Recipe:
@@ -110,6 +112,8 @@ async def moderate_recipe(
         moderator_id=mod.id,
         rejection_reason=body.rejection_reason,
     )
+    if body.action == "approve":
+        background_tasks.add_task(tag_service.classify_recipe_tags, recipe_id)
     return schemas.Recipe.model_validate(updated)
 
 
@@ -137,6 +141,7 @@ async def moderate_draft(
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[Cache, Depends(get_cache)],
     mod: Annotated[User, Depends(require_moderator)],
+    background_tasks: BackgroundTasks,
     draft_id: int,
     body: schemas.ModerationAction,
 ) -> schemas.RecipeDraftResponse:
@@ -148,6 +153,8 @@ async def moderate_draft(
         moderator_id=mod.id,
         rejection_reason=body.rejection_reason,
     )
+    if body.action == "approve" and updated.recipe_id is not None:
+        background_tasks.add_task(tag_service.classify_recipe_tags, updated.recipe_id)
     return schemas.RecipeDraftResponse.model_validate(updated)
 
 
