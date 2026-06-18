@@ -43,7 +43,7 @@ async def invalidate_on_user_change(cache: Cache, user_id: int) -> None:
 
 
 async def invalidate_on_moderation(cache: Cache, recipe_id: int | None = None) -> None:
-    keys = [pending_count(), cuisines()]
+    keys = [pending_count(), cuisines(), categories(4), categories(6), categories(8)]
     if recipe_id is not None:
         keys.append(recipe_detail(recipe_id))
     await cache.delete(*keys)
