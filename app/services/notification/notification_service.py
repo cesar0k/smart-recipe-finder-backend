@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.exceptions import NotFoundError
-from app.models.notification.notification import Notification
 from app.models.auth.user import User
+from app.models.notification.notification import Notification
 from app.schemas.notification import NotificationResponse
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,7 @@ async def _schedule_notification_email(
     *,
     user_id: int,
     notification_type: str,
+    title: str,
     message: str,
     recipe_id: int | None = None,
 ) -> None:
@@ -67,7 +68,9 @@ async def _schedule_notification_email(
     """
     try:
         from app.db.session import AsyncSessionLocal
-        from app.services.notification.email_service import send_notification_email  # avoid circular import
+
+        # Local import avoids a circular dependency at module import time.
+        from app.services.notification.email_service import send_notification_email
 
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
@@ -81,6 +84,7 @@ async def _schedule_notification_email(
                         session,
                         user=user,
                         notification_type=notification_type,
+                        title=title,
                         message=message,
                         recipe_id=recipe_id,
                     )
@@ -125,6 +129,7 @@ async def notify_and_broadcast(
         db,
         user_id=user_id,
         notification_type=type,
+        title=title,
         message=message,
         recipe_id=recipe_id,
     )
@@ -161,6 +166,7 @@ async def notify_bulk_and_broadcast(
             db,
             user_id=uid,
             notification_type=type,
+            title=title,
             message=message,
             recipe_id=recipe_id,
         )
