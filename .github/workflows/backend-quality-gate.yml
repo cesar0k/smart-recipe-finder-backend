@@ -47,8 +47,9 @@ jobs:
           echo "HF_TOKEN=${{ secrets.HF_TOKEN }}" >> .env
           echo "EMBEDDING_MODEL=intfloat/multilingual-e5-large-instruct" >> .env
 
-          echo "S3_ACCESS_KEY=${{ secrets.MINIO_ROOT_USER }}" >> .env
-          echo "S3_SECRET_KEY=${{ secrets.MINIO_ROOT_PASSWORD }}" >> .env
+          echo "S3_ACCESS_KEY=${{ secrets.S3_ACCESS_KEY }}" >> .env
+          echo "S3_SECRET_KEY=${{ secrets.S3_SECRET_KEY }}" >> .env
+          echo "GARAGE_RPC_SECRET=$(openssl rand -hex 32)" >> .env
 
           echo "SECRET_KEY=$(openssl rand -hex 32)" >> .env
 

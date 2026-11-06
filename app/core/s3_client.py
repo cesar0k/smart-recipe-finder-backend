@@ -21,8 +21,11 @@ class S3Client:
             endpoint_url=settings.S3_ENDPOINT,
             aws_access_key_id=settings.S3_ACCESS_KEY,
             aws_secret_access_key=settings.S3_SECRET_KEY,
-            region_name="us-east-1",
-            config=Config(signature_version="s3v4"),
+            region_name=settings.S3_REGION,
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+            ),
         )
 
     async def upload_file(self, file_obj: BinaryIO, object_name: str, content_type: str) -> str:
@@ -35,7 +38,7 @@ class S3Client:
                 ExtraArgs={"ContentType": content_type},
             )
 
-            return f"{settings.S3_PUBLIC_ENDPOINT}/{settings.S3_BUCKET_NAME}/{object_name}"
+            return f"{settings.S3_PUBLIC_ENDPOINT}/{object_name}"
 
         except ClientError as ex:
             logger.error(f"S3 file upload failed: {ex}")
@@ -55,13 +58,13 @@ class S3Client:
     async def delete_image_from_s3(self, file_url: str) -> None:
         try:
             parsed = urlparse(file_url)
-            path_parts = parsed.path.lstrip("/").split("/", 1)
+            path = parsed.path.lstrip("/")
 
-            if len(path_parts) == 2 and path_parts[0] == settings.S3_BUCKET_NAME:
-                object_key = path_parts[1]
+            bucket_prefix = f"{settings.S3_BUCKET_NAME}/"
+            object_key = path[len(bucket_prefix) :] if path.startswith(bucket_prefix) else path
+
+            if object_key:
                 await self.delete_file(object_key)
-            else:
-                pass
         except Exception as ex:
             logger.error(f"S3 image delete failed: {ex}")
 
@@ -105,25 +108,44 @@ class S3Client:
         except ClientError:
             logger.info(f"Bucket {settings.S3_BUCKET_NAME} not found. Creating...")
             await asyncio.to_thread(self.client.create_bucket, Bucket=settings.S3_BUCKET_NAME)
+            await self._try_make_bucket_public()
 
-            policy = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Sid": "PublicRead",
-                        "Effect": "Allow",
-                        "Principal": "*",
-                        "Action": ["s3:GetObject"],
-                        "Resource": [f"arn:aws:s3:::{settings.S3_BUCKET_NAME}/*"],
-                    }
-                ],
-            }
+        await self._ensure_website_hosting()
 
+    async def _try_make_bucket_public(self) -> None:
+        """Apply a public-read bucket policy where the backend supports it."""
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "PublicRead",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{settings.S3_BUCKET_NAME}/*"],
+                }
+            ],
+        }
+
+        try:
             await asyncio.to_thread(
                 self.client.put_bucket_policy,
                 Bucket=settings.S3_BUCKET_NAME,
                 Policy=json.dumps(policy),
             )
+        except ClientError as ex:
+            logger.info(f"Bucket policies are not supported by this S3 backend: {ex}")
+
+    async def _ensure_website_hosting(self) -> None:
+        """Enable the public website endpoint for the bucket."""
+        try:
+            await asyncio.to_thread(
+                self.client.put_bucket_website,
+                Bucket=settings.S3_BUCKET_NAME,
+                WebsiteConfiguration={"IndexDocument": {"Suffix": "index.html"}},
+            )
+        except ClientError as ex:
+            logger.info(f"Website hosting is not supported by this S3 backend: {ex}")
 
 
 s3_client = S3Client()

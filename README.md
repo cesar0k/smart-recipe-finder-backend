@@ -13,7 +13,7 @@ Frontend — [smart-recipe-finder-frontend](https://github.com/cesar0k/smart-rec
 | Database | PostgreSQL 17 + SQLAlchemy (async) |
 | Vector search | ChromaDB + `intfloat/multilingual-e5-large-instruct` |
 | Cache | Redis (version-scoped keys) |
-| Object storage | MinIO (S3-compatible) |
+| Object storage | S3-compatible |
 | Auth | JWT access tokens + rotating refresh tokens, Google OAuth2 |
 | Email | aiosmtplib (any SMTP relay) |
 | Real-time | WebSocket notifications |

@@ -31,7 +31,7 @@ PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 async def upload_local_photos(recipe_id: int, json_id: int) -> list[tuple[str, str]]:
     """
-    Upload photos from datasets/recipe_photos/{json_id}/ to Minio.
+    Upload photos from datasets/recipe_photos/{json_id}/ to object storage.
 
     Each photo is run through the SAME compression pipeline as user uploads
     (image_service.generate_compressed_versions): a full-size WebP and a
@@ -77,7 +77,7 @@ async def upload_local_photos(recipe_id: int, json_id: int) -> list[tuple[str, s
 async def seed(lang: str) -> None:
     """
     Seeds the database with sample recipes.
-    If datasets/recipe_photos/{id}/ exists with photos, uploads them to Minio.
+    If datasets/recipe_photos/{id}/ exists with photos, uploads them to object storage.
     Otherwise, uses image_urls from the JSON dataset.
     """
     print(f"Seeding database with '{lang}' recipes...")
@@ -102,12 +102,12 @@ async def seed(lang: str) -> None:
     await _redis.aclose()
     print(" - Redis cache cleared.")
 
-    print("Clearing Minio bucket...")
+    print("Clearing object storage bucket...")
     try:
         deleted = await s3_client.clear_bucket()
-        print(f" - Deleted {deleted} object(s) from Minio.")
+        print(f" - Deleted {deleted} object(s) from object storage.")
     except Exception as ex:
-        print(f" - Warning: could not clear Minio bucket: {ex}")
+        print(f" - Warning: could not clear object storage bucket: {ex}")
 
     has_photos_dir = RECIPE_PHOTOS_PATH.exists() and any(RECIPE_PHOTOS_PATH.iterdir())
     if has_photos_dir:
