@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import (
 from app.core.config import settings
 from app.services.auth import google_auth_service
 from app.services.social import user_service
+
+
 def _png_bytes(size: int = 64) -> bytes:
     """Produce a small valid PNG so libmagic recognises image/png."""
     buf = BytesIO()
@@ -91,7 +93,7 @@ async def test_set_avatar_from_remote_url_persists_to_s3(
     async def _fake_upload(file_obj: object, object_name: str, content_type: str) -> str:
         captured["object_name"] = object_name
         captured["content_type"] = content_type
-        return f"{settings.S3_PUBLIC_ENDPOINT}/{settings.S3_BUCKET_NAME}/{object_name}"
+        return f"{settings.S3_PUBLIC_ENDPOINT}/{object_name}"
 
     monkeypatch.setattr(
         user_service,
@@ -120,9 +122,7 @@ async def test_set_avatar_from_remote_url_persists_to_s3(
             url="https://lh3.googleusercontent.com/a/CCCC=s400-c",
         )
         assert result.avatar_url is not None
-        assert result.avatar_url.startswith(
-            f"{settings.S3_PUBLIC_ENDPOINT}/{settings.S3_BUCKET_NAME}/avatars/{user.id}/"
-        )
+        assert result.avatar_url.startswith(f"{settings.S3_PUBLIC_ENDPOINT}/avatars/{user.id}/")
         assert "googleusercontent.com" not in result.avatar_url
         assert captured["content_type"] == "image/png"
         assert captured["object_name"].startswith(f"avatars/{user.id}/")

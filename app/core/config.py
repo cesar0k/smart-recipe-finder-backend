@@ -18,9 +18,9 @@ class Settings(BaseSettings):
     ALLOWED_HOSTS: list[str] = ["*"]
 
     # Rate limits applied via slowapi. Per IP.
-    RATE_LIMIT_DEFAULT: str = "120/minute"   # blanket limit on /api/v1/*
-    RATE_LIMIT_AUTH: str = "10/minute"       # login / register / password-reset / verify-email
-    RATE_LIMIT_SEARCH: str = "30/minute"     # vector search — expensive (embeddings)
+    RATE_LIMIT_DEFAULT: str = "120/minute"  # blanket limit on /api/v1/*
+    RATE_LIMIT_AUTH: str = "10/minute"  # login / register / password-reset / verify-email
+    RATE_LIMIT_SEARCH: str = "30/minute"  # vector search — expensive (embeddings)
 
     SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
@@ -41,8 +41,9 @@ class Settings(BaseSettings):
 
     HF_TOKEN: str = ""
 
-    S3_ENDPOINT: str = "http://minio:9000"
-    S3_PUBLIC_ENDPOINT: str = "http://localhost:9000"
+    S3_ENDPOINT: str = "http://s3:3900"
+    S3_PUBLIC_ENDPOINT: str = "http://recipe-images.web.s3.localhost:3902"
+    S3_REGION: str = "us-east-1"
     S3_ACCESS_KEY: str = ""
     S3_SECRET_KEY: str = ""
     S3_BUCKET_NAME: str = "recipe-images"
@@ -58,9 +59,9 @@ class Settings(BaseSettings):
     MAX_IMAGE_WIDTH: int = 8192
     MAX_IMAGE_HEIGHT: int = 8192
     IMAGE_FULL_MAX_WIDTH: int = 1200  # px; full-size WebP output
-    IMAGE_FULL_QUALITY: int = 85      # WebP quality for full-size variant
+    IMAGE_FULL_QUALITY: int = 85  # WebP quality for full-size variant
     IMAGE_THUMB_MAX_WIDTH: int = 400  # px; thumbnail WebP output
-    IMAGE_THUMB_QUALITY: int = 60     # WebP quality for thumbnail variant
+    IMAGE_THUMB_QUALITY: int = 60  # WebP quality for thumbnail variant
 
     EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large-instruct"
     LLM_MODEL: str = "google/gemini-3-flash-preview"  # openrouter/router model; override via .env

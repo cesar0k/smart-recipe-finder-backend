@@ -69,12 +69,10 @@ async def _check_chroma() -> None:
     await asyncio.to_thread(vector_store.client.heartbeat)
 
 
-async def _check_minio() -> None:
+async def _check_s3() -> None:
     from app.core.config import settings
 
-    await asyncio.to_thread(
-        s3_client.client.head_bucket, Bucket=settings.S3_BUCKET_NAME
-    )
+    await asyncio.to_thread(s3_client.client.head_bucket, Bucket=settings.S3_BUCKET_NAME)
 
 
 def is_embedding_model_ready() -> bool:
@@ -82,12 +80,12 @@ def is_embedding_model_ready() -> bool:
 
 
 async def run_all_checks() -> HealthReport:
-    names = ["postgres", "redis", "chroma", "minio"]
+    names = ["postgres", "redis", "chroma", "s3"]
     coros = [
         _check_postgres(),
         _check_redis(),
         _check_chroma(),
-        _check_minio(),
+        _check_s3(),
     ]
     results = await asyncio.gather(
         *(_timed(name, coro) for name, coro in zip(names, coros, strict=True))
@@ -99,9 +97,7 @@ async def run_all_checks() -> HealthReport:
 
 
 def _overall_status(checks: dict[str, CheckResult]) -> OverallStatus:
-    has_critical_fail = any(
-        r.status == "fail" and r.critical for r in checks.values()
-    )
+    has_critical_fail = any(r.status == "fail" and r.critical for r in checks.values())
     if has_critical_fail:
         return "fail"
 

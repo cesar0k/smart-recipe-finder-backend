@@ -1,0 +1,25 @@
+# Single-node Garage configuration for local development.
+# Reference: https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "s3:3901"
+
+[s3_api]
+s3_region = "us-east-1"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.localhost"
+public_endpoint = "http://localhost:3900"
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.s3.localhost"
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"
