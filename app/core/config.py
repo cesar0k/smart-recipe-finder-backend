@@ -5,7 +5,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     APP_PORT: int = 8001
 
@@ -64,7 +68,11 @@ class Settings(BaseSettings):
     IMAGE_THUMB_QUALITY: int = 60  # WebP quality for thumbnail variant
 
     EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large-instruct"
-    LLM_MODEL: str = "google/gemini-3-flash-preview"  # openrouter/router model; override via .env
+    LLM_PROVIDER: str = "fal"  # fal | openai
+    LLM_MODEL: str = "google/gemini-3-flash-preview"  # model id for the selected provider
+    FAL_KEY: str = ""
+    LLM_API_KEY: str = ""
+    LLM_BASE_URL: str = "https://api.openai.com/v1"
 
     SIMILAR_RECIPES_MAX: int = 6
     SIMILAR_RECIPES_THRESHOLD: float = 0.75
