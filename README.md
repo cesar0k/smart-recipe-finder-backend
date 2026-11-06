@@ -55,7 +55,7 @@ cp .env.example .env   # then fill in the required values
 
 Required `.env` values: `SECRET_KEY`, `DB_*`, `S3_*`, `CHROMA_COLLECTION_NAME`.
 
-Optional: `GOOGLE_CLIENT_*` (OAuth2), `FAL_KEY` + `LLM_MODEL` (tag classification & query rewriting), `SMTP_*` (transactional email).
+Optional: `GOOGLE_CLIENT_*` (OAuth2), `LLM_PROVIDER` + `LLM_MODEL` and a provider key (`FAL_KEY` or `LLM_API_KEY`) for tag classification & query rewriting, `SMTP_*` (transactional email).
 
 ### 2. Start services
 

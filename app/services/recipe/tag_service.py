@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import os
 from typing import Any
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from app.llm import LLMProvider, get_llm_provider
 from app.models._base.enums import (
     CookingMethod,
     CostTier,
@@ -22,8 +21,6 @@ from app.models._base.enums import (
 from app.services.recipe import cache_keys
 
 log = logging.getLogger(__name__)
-
-_FAL_APP = "openrouter/router"
 
 _ENUM_TAG_DOMAINS: dict[str, frozenset[str]] = {
     "meal_type": frozenset(e.value for e in MealType),
@@ -62,13 +59,6 @@ def _sanitize_tag_domains(tags: dict[str, Any]) -> dict[str, Any]:
             )
             out.pop(field)
     return out
-
-
-def _get_llm_model() -> str:
-    """Read LLM model from settings (allows override via .env)."""
-    from app.core.config import settings
-
-    return settings.LLM_MODEL
 
 
 # Tag classification JSON schema description (for LLM system prompt)
@@ -116,72 +106,15 @@ Examples:
 """
 
 
-# ── FAL client helper ─────────────────────────────────────────────────────────
-
-
-def _get_fal_key() -> str | None:
-    key = os.environ.get("FAL_KEY", "")
-    if not key:
-        from pathlib import Path
-
-        env_file = Path(__file__).resolve().parents[2] / ".env"
-        if env_file.exists():
-            for line in env_file.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("FAL_KEY="):
-                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    os.environ["FAL_KEY"] = key
-                    break
-    return key or None
-
-
-def _strip_fences(text: str) -> str:
-    text = text.strip()
-    if text.startswith("```"):
-        text = text[text.index("\n") + 1 :] if "\n" in text else text[3:]
-        if text.endswith("```"):
-            text = text[:-3].rstrip()
-    return text.strip()
-
-
-async def _fal_call(prompt: str, system_prompt: str) -> dict[str, Any]:
-    """Single async fal.ai call returning a JSON object. Raises on error."""
-    import fal_client
-
-    result = await fal_client.run_async(
-        _FAL_APP,
-        arguments={
-            "model": _get_llm_model(),
-            "system_prompt": system_prompt,
-            "prompt": prompt,
-            "response_format": json.dumps({"type": "json_object"}),
-        },
-    )
-    raw = _strip_fences(result["output"])
-    return json.loads(raw)  # type: ignore[no-any-return]
-
-
-async def _fal_call_text(prompt: str, system_prompt: str) -> str:
-    """Single async fal.ai call returning plain text. Raises on error."""
-    import fal_client
-
-    result = await fal_client.run_async(
-        _FAL_APP,
-        arguments={
-            "model": _get_llm_model(),
-            "system_prompt": system_prompt,
-            "prompt": prompt,
-        },
-    )
-    return str(result["output"]).strip()
-
-
 # ── Recipe tag classification ─────────────────────────────────────────────────
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=10))
-async def _classify_with_retry(recipe_prompt: str) -> dict[str, Any]:
-    return await _fal_call(recipe_prompt, _TAG_SYSTEM_PROMPT)
+async def _classify_with_retry(provider: LLMProvider, recipe_prompt: str) -> dict[str, Any]:
+    return await provider.complete_json(
+        prompt=recipe_prompt,
+        system_prompt=_TAG_SYSTEM_PROMPT,
+    )
 
 
 async def classify_recipe_tags(recipe_id: int) -> None:
@@ -190,9 +123,10 @@ async def classify_recipe_tags(recipe_id: int) -> None:
     Opens its own session — safe to call from BackgroundTasks (after response sent).
     Silently logs and returns on any failure; never raises.
     """
-    if not _get_fal_key():
-        log.warning(  # noqa: E501
-            "tag_service: FAL_KEY not set, skipping tag classification for recipe %d",
+    provider = get_llm_provider()
+    if provider is None:
+        log.warning(
+            "tag_service: no LLM provider configured, skipping tag classification for recipe %d",
             recipe_id,
         )
         return
@@ -232,7 +166,7 @@ async def classify_recipe_tags(recipe_id: int) -> None:
                 f"Difficulty: {recipe.difficulty}"
             )
 
-            tags_data = await _classify_with_retry(prompt)
+            tags_data = await _classify_with_retry(provider, prompt)
             # Drop enum-backed values that fall outside the schema (LLM drift).
             # Without this an INSERT into recipe_tags blows up on the enum cast.
             tags_data = _sanitize_tag_domains(tags_data)
@@ -342,12 +276,16 @@ async def parse_query_intent(query: str) -> dict[str, Any] | None:
         dict with tag filters (may be empty {}) — no filters found.
         None — LLM unavailable or timeout; caller should skip tag filtering.
     """
-    if not _get_fal_key():
+    provider = get_llm_provider()
+    if provider is None:
         return None
 
     try:
         result = await asyncio.wait_for(
-            _fal_call(f'Query: "{query}"', _QUERY_INTENT_SYSTEM_PROMPT),
+            provider.complete_json(
+                prompt=f'Query: "{query}"',
+                system_prompt=_QUERY_INTENT_SYSTEM_PROMPT,
+            ),
             timeout=3.0,
         )
         # Validate it's a dict (not a list or primitive)
@@ -395,12 +333,16 @@ async def rewrite_query(query: str) -> str | None:
     If the query is already plain, the LLM returns it unchanged.
     Hard 3-second timeout — callers fall back to the original query on None.
     """
-    if not _get_fal_key():
+    provider = get_llm_provider()
+    if provider is None:
         return None
 
     try:
         result = await asyncio.wait_for(
-            _fal_call_text(f'Query: "{query}"', _REWRITE_SYSTEM_PROMPT),
+            provider.complete_text(
+                prompt=f'Query: "{query}"',
+                system_prompt=_REWRITE_SYSTEM_PROMPT,
+            ),
             timeout=3.0,
         )
         rewritten = result.strip().strip('"').strip("'")
