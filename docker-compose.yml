@@ -9,7 +9,7 @@ services:
       GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY}
       GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_KEY}
       GARAGE_DEFAULT_BUCKET: ${S3_BUCKET_NAME:-recipe-images}
-      RUST_LOG: ${GARAGE_LOG_LEVEL:-garage=info}
+      RUST_LOG: ${GARAGE_LOG_LEVEL:-garage=warn}
     entrypoint: ["/garage"]
     command: ["server", "--single-node", "--default-bucket"]
     ports:
@@ -119,6 +119,39 @@ services:
       timeout: 3s
       retries: 3
       start_period: 60s
+
+  mcp:
+    build: .
+    container_name: smart-recipe-finder-mcp
+    restart: unless-stopped
+    profiles: ["mcp"]
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SRF_API_URL=http://app:8000
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8002
+    command:
+      [
+        "python",
+        "-m",
+        "app.mcp.server",
+        "--transport",
+        "streamable-http",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8002",
+      ]
+    ports:
+      - "8002:8002"
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      app:
+        condition: service_healthy
 
 volumes:
   postgres_data:

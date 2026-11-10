@@ -2,8 +2,6 @@
 
 RESTful API for a recipe platform with semantic vector search, content moderation, real-time notifications, and transactional email.
 
-Frontend — [smart-recipe-finder-frontend](https://github.com/cesar0k/smart-recipe-finder-frontend)
-
 ## Tech Stack
 
 | Layer | Technology |
@@ -156,6 +154,63 @@ docker compose exec app python scripts/seed_db.py --lang ru  # or --lang en
 - Comment report queue with aggregated report counts.
 - Moderation log (who approved/rejected what and when).
 - Moderators and admins receive in-app + email alerts for new pending content.
+
+## MCP Server
+
+The repository ships a read-only MCP adapter in `app/mcp/`. It is a thin client
+of the REST API, so validation, caching and rate limiting stay in one place. v1
+exposes recipe discovery only: `search_recipes`, `browse_recipes`, `get_recipe`,
+`find_similar_recipes` and `list_cuisines`.
+
+Every tool calls a public or optional-auth REST endpoint, so **no token is
+needed**. Anonymous callers only see approved recipes, which is exactly what the
+adapter is for. The adapter has no write surface.
+
+### 1. Run over stdio (Claude Desktop, Cursor, etc.)
+
+```json
+{
+  "mcpServers": {
+    "smart-recipe-finder": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "app.mcp.server", "--transport", "stdio"],
+      "env": {
+        "SRF_API_URL": "http://localhost:8001"
+      }
+    }
+  }
+}
+```
+
+### 2. Run over Streamable HTTP (remote agents)
+
+```bash
+python -m app.mcp.server --transport streamable-http --host 0.0.0.0 --port 8002
+```
+
+Or via Docker Compose (opt-in profile):
+
+```bash
+docker compose --profile mcp up -d
+```
+
+Remote clients connect to `http://localhost:8002/mcp`:
+
+```json
+{
+  "mcpServers": {
+    "smart-recipe-finder": {
+      "url": "http://localhost:8002/mcp"
+    }
+  }
+}
+```
+
+> **Note:** the MCP process calls the REST API from a single IP, so slowapi's
+> per-IP limits (`120/minute`, `30/minute` for search) are shared by all MCP
+> users. Keep the HTTP transport on localhost or a private network; if it must
+> be public, put it behind your own gateway/auth. The adapter intentionally has
+> no per-user authentication.
 
 ## Testing
 
