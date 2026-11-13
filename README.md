@@ -166,6 +166,20 @@ Every tool calls a public or optional-auth REST endpoint, so **no token is
 needed**. Anonymous callers only see approved recipes, which is exactly what the
 adapter is for. The adapter has no write surface.
 
+### Prompts
+
+Two optional slash-command templates:
+
+| Prompt | Arguments | Purpose |
+|---|---|---|
+| `plan_weekly_menu` | `days` (1–7, default 5), `dietary`, `max_time`, `cuisine` | Day-by-day dinner plan with a shopping list |
+| `cook_from_fridge` | `ingredients` (required), `max_extra` (default 2), `max_time` | Recipes that mostly use what the user already has |
+
+OpenCode uses `/srf-mcp:<prompt>` and Claude Code uses
+`/mcp__srf-mcp__<prompt>`. Arguments are positional; quote values that contain
+spaces. Reconnect the server after changing prompts (`/mcps` or
+`/mcp reconnect`).
+
 ### 1. Run over stdio (Claude Desktop, Cursor, etc.)
 
 ```json
