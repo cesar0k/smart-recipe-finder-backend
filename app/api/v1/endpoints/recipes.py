@@ -19,9 +19,10 @@ from app.core.config import settings
 from app.core.health import is_embedding_model_ready
 from app.core.rate_limit import limiter
 from app.db.session import get_db
+from app.models._base.enums import MealType
 from app.models.auth.user import User
-from app.services.recipe import recipe_service
-from app.services.recipe import tag_service
+from app.services.recipe import recipe_service, tag_service
+
 router = APIRouter()
 
 
@@ -84,7 +85,15 @@ async def read_recipes(
     max_time: int | None = Query(None, ge=0, description="Max cooking time in minutes"),
     difficulty: str | None = Query(None, description="Comma-separated: easy,medium,hard"),
     cuisine: str | None = Query(None, description="Comma-separated cuisine values"),
-    meal_type: str | None = Query(None, description="Filter by meal_type tag (e.g. soup, dessert)"),
+    meal_type: Annotated[
+        MealType | None,
+        Query(
+            description=(
+                "Meal type tag: breakfast, lunch, dinner, dessert, snack, "
+                "drink, soup, salad, side, other"
+            )
+        ),
+    ] = None,
     has_comments: bool = Query(False, description="Only return recipes with at least one comment"),
     sort: str = Query(
         "newest",
