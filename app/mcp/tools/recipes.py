@@ -68,7 +68,12 @@ async def search_recipes(
     ] = None,
     cuisine: Annotated[
         str | None,
-        Field(description="Cuisine filter, e.g. 'italian' or 'russian'."),
+        Field(
+            description=(
+                "Cuisine filter. Call list_cuisines first and pass the exact "
+                "name it returns; names may be English or Russian."
+            )
+        ),
     ] = None,
 ) -> list[RecipeCard]:
     """Search approved recipes by meaning, not just keywords.
@@ -124,7 +129,12 @@ async def browse_recipes(
     ] = None,
     cuisine: Annotated[
         str | None,
-        Field(description="Cuisine filter, e.g. 'italian'."),
+        Field(
+            description=(
+                "Cuisine filter. Call list_cuisines first and pass the exact "
+                "name it returns; names may be English or Russian."
+            )
+        ),
     ] = None,
     meal_type: Annotated[
         str | None,
@@ -192,7 +202,10 @@ async def find_similar_recipes(
 
 
 async def list_cuisines() -> list[str]:
-    """List cuisines that have at least one approved recipe."""
+    """List cuisines that have at least one approved recipe.
+
+    Use the returned names verbatim in the ``cuisine`` filters.
+    """
     data = await _get_json("/api/v1/recipes/cuisines")
     if not isinstance(data, list):
         raise ToolError("Unexpected response from the recipe API.")
