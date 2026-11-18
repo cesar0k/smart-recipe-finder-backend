@@ -115,12 +115,13 @@
   },
   {
     "id": 11,
-    "description": "TRAP: \"pea\" is a substring, not a whole ingredient.",
+    "description": "TRAP: \"pea\" must not match \"peanut\"; the plural \"peas\" is a legitimate whole-word match.",
     "include_ingredients": "pea",
     "exclude_ingredients": "",
-    "should_contain": [],
+    "should_contain": [
+      "Beef Stroganoff Casserole With Biscuit Topping"
+    ],
     "should_not_contain": [
-      "Beef Stroganoff Casserole With Biscuit Topping",
       "Kiddie Chow"
     ]
   },
@@ -478,17 +479,17 @@
   },
   {
     "id": 41,
-    "description": "Combined: include \"sour cream\", exclude \"mushroom\".",
+    "description": "Combined: include \"sour cream\", exclude \"mushroom\". Jiffy Stroganoff is excluded because it contains mushrooms.",
     "include_ingredients": "sour cream",
     "exclude_ingredients": "mushroom",
     "should_contain": [
       "Susan'S Favorite Enchiladas",
-      "Cheese Potato Dish",
-      "Jiffy Stroganoff"
+      "Cheese Potato Dish"
     ],
     "should_not_contain": [
       "Beef Stroganoff Casserole With Biscuit Topping",
-      "Jean'S Mess"
+      "Jean'S Mess",
+      "Jiffy Stroganoff"
     ]
   },
   {
