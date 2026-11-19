@@ -1,0 +1,81 @@
+# GitLab mirror of .github/workflows/backend-quality-gate.yml.
+#
+# Needs a Docker-in-Docker runner (privileged) and these CI/CD variables:
+# DB_USER, DB_PASSWORD, DB_NAME, CHROMA_COLLECTION_NAME, HF_TOKEN,
+# EMBEDDING_MODEL, S3_ACCESS_KEY, S3_SECRET_KEY.
+#
+# Tests and the search benchmark run inside the image built from Dockerfile,
+# against the postgres and chroma services from docker-compose.yml.
+
+stages:
+  - test
+
+variables:
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_TLS_VERIFY: "1"
+  DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  DOCKER_DRIVER: overlay2
+  # Keep the compose network name predictable for `docker run --network`.
+  COMPOSE_PROJECT_NAME: srf-ci
+  IMAGE: srf-ci:$CI_COMMIT_SHORT_SHA
+
+default:
+  image: docker:27-cli
+  services:
+    - name: docker:27-dind
+      alias: docker
+  before_script:
+    - apk add --no-cache bash openssl
+    - docker compose version >/dev/null || apk add --no-cache docker-cli-compose
+  interruptible: true
+
+validate-and-benchmark:
+  stage: test
+  timeout: 1h
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - |
+      cat > .env <<EOF
+      DB_HOST=postgres
+      DB_INTERNAL_PORT=5432
+      DB_EXTERNAL_PORT=5432
+      DB_USER=${DB_USER}
+      DB_PASSWORD=${DB_PASSWORD}
+      DB_NAME=${DB_NAME}
+      DB_ROOT_PASSWORD=${DB_PASSWORD}
+      POSTGRES_PASSWORD=${DB_PASSWORD}
+
+      CHROMA_HOST=chroma
+      CHROMA_PORT=8000
+      CHROMA_COLLECTION_NAME=${CHROMA_COLLECTION_NAME}
+
+      HF_TOKEN=${HF_TOKEN}
+      EMBEDDING_MODEL=${EMBEDDING_MODEL}
+
+      S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      S3_SECRET_KEY=${S3_SECRET_KEY}
+      GARAGE_RPC_SECRET=$(openssl rand -hex 32)
+
+      SECRET_KEY=$(openssl rand -hex 32)
+      EOF
+    - docker compose up -d --wait postgres chroma
+    - docker build -t "$IMAGE" .
+    - >
+      docker run --rm
+      --network "${COMPOSE_PROJECT_NAME}_default"
+      --env-file .env
+      -e DB_HOST=postgres
+      -e CHROMA_HOST=chroma
+      "$IMAGE" pytest -m crud -v
+    - >
+      docker run --rm
+      --network "${COMPOSE_PROJECT_NAME}_default"
+      --env-file .env
+      -e DB_HOST=postgres
+      -e CHROMA_HOST=chroma
+      "$IMAGE" python -m evals.retrieval.evaluate
+  after_script:
+    - if [ "$CI_JOB_STATUS" = "failed" ]; then docker compose logs || true; fi
