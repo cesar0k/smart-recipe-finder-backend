@@ -52,11 +52,16 @@ async def search_recipes(
     ] = 5,
     include_ingredients: Annotated[
         list[str] | None,
-        Field(description="Ingredients that must be present, e.g. ['chicken', 'rice']."),
+        Field(
+            description=(
+                "Ingredients that must be present, in Russian, e.g. ['курица', 'рис']. "
+                "The recipe database stores ingredient names in Russian."
+            )
+        ),
     ] = None,
     exclude_ingredients: Annotated[
         list[str] | None,
-        Field(description="Ingredients to avoid, e.g. ['peanuts']."),
+        Field(description="Ingredients to avoid, in Russian, e.g. ['арахис']."),
     ] = None,
     max_time: Annotated[
         int | None,
@@ -109,11 +114,16 @@ async def browse_recipes(
     ] = 10,
     include_ingredients: Annotated[
         list[str] | None,
-        Field(description="Ingredients that must be present."),
+        Field(
+            description=(
+                "Ingredients that must be present, in Russian, e.g. ['курица', 'рис']. "
+                "The recipe database stores ingredient names in Russian."
+            )
+        ),
     ] = None,
     exclude_ingredients: Annotated[
         list[str] | None,
-        Field(description="Ingredients to avoid."),
+        Field(description="Ingredients to avoid, in Russian, e.g. ['арахис']."),
     ] = None,
     min_time: Annotated[
         int | None,
@@ -138,7 +148,12 @@ async def browse_recipes(
     ] = None,
     meal_type: Annotated[
         str | None,
-        Field(description="Meal type tag, e.g. 'soup', 'dessert', 'breakfast'."),
+        Field(
+            description=(
+                "Meal type tag: breakfast, lunch, dinner, dessert, snack, drink, "
+                "soup, salad, side, other."
+            )
+        ),
     ] = None,
     sort: Annotated[
         Literal["newest", "popular", "top_rated", "most_favorited"],
