@@ -180,6 +180,22 @@ OpenCode uses `/srf-mcp:<prompt>` and Claude Code uses
 spaces. Reconnect the server after changing prompts (`/mcps` or
 `/mcp reconnect`).
 
+### Agent evals
+
+`evals/` holds a minimal agent loop and a Pydantic Evals dataset of
+natural-language requests. Cases are graded on the tool trace
+(`ToolRequirements`, `ToolErrors`) and on the final answer by an LLM judge. The
+REST API must be running; the runner starts its own stdio MCP server.
+
+```bash
+uv run python -m evals.run --limit 3   # smoke test
+uv run python -m evals.run             # full dataset
+uv run python -m evals.run --no-judge  # tool checks only
+```
+
+Add cases in `evals/datasets/mcp_agent.json`, not in Python. Evals belong in a
+nightly job, not PR CI: they call a real LLM and the live API.
+
 ### 1. Run over stdio (Claude Desktop, Cursor, etc.)
 
 ```json
