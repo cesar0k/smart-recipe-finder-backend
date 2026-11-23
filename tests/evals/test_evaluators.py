@@ -12,10 +12,15 @@ pytest.importorskip("pydantic_evals", reason="eval dependencies are optional")
 
 from pydantic_evals.evaluators import EvaluatorContext  # noqa: E402
 
-from evals.agent import AgentRun, ToolCallRecord  # noqa: E402
-from evals.dataset import EvalCase, Requirement  # noqa: E402
-from evals.evaluators import ToolErrors, ToolRequirements, _args_match, _satisfied  # noqa: E402
-from evals.judge import JudgeAnswer, _format_tool_calls  # noqa: E402
+from evals.mcp_agent.agent import AgentRun, ToolCallRecord  # noqa: E402
+from evals.mcp_agent.dataset import EvalCase, Requirement  # noqa: E402
+from evals.mcp_agent.evaluators import (  # noqa: E402
+    ToolErrors,
+    ToolRequirements,
+    _args_match,
+    _satisfied,
+)
+from evals.mcp_agent.judge import JudgeAnswer, _format_tool_calls  # noqa: E402
 
 
 def _context(case: EvalCase, run: AgentRun) -> EvaluatorContext[str, AgentRun, EvalCase]:

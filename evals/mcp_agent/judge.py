@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from openai import AsyncOpenAI
 from pydantic_evals.evaluators import EvaluationReason, Evaluator, EvaluatorContext
 
-from evals.agent import AgentRun
-from evals.dataset import EvalCase
+from evals.mcp_agent.agent import AgentRun
+from evals.mcp_agent.dataset import EvalCase
 
 MAX_ANSWER_CHARS = 4000
 

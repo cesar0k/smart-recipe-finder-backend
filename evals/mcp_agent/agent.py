@@ -18,7 +18,7 @@ from mcp.types import TextContent, Tool
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
-from evals.config import EvalSettings
+from evals.mcp_agent.config import EvalSettings
 
 # Tool output can be large (20 recipes with descriptions). Keep the context
 # bounded; the agent only needs the fields it quotes back to the user. The judge

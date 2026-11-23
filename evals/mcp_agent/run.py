@@ -1,10 +1,10 @@
 """Run agent-level evals against the MCP server.
 
 Usage:
-    uv run python -m evals.run                    # all cases
-    uv run python -m evals.run --limit 3          # smoke test
-    uv run python -m evals.run --case search-salads --case get-recipe-260
-    uv run python -m evals.run --no-judge         # tool checks only, no LLM judge
+    uv run python -m evals.mcp_agent.run                    # all cases
+    uv run python -m evals.mcp_agent.run --limit 3          # smoke test
+    uv run python -m evals.mcp_agent.run --case search-salads
+    uv run python -m evals.mcp_agent.run --no-judge         # tool checks only, no LLM judge
 
 The REST API must be running (``docker compose up``); the runner starts its own
 stdio MCP server and points it at ``SRF_API_URL``.
@@ -19,11 +19,11 @@ from openai import AsyncOpenAI
 from pydantic_evals.evaluators import Evaluator
 from pydantic_evals.reporting import EvaluationReport
 
-from evals.agent import AgentRun, MCPAgent
-from evals.config import EvalSettings
-from evals.dataset import EvalCase, build_dataset, load_cases
-from evals.evaluators import ToolErrors, ToolRequirements
-from evals.judge import JudgeAnswer
+from evals.mcp_agent.agent import AgentRun, MCPAgent
+from evals.mcp_agent.config import EvalSettings
+from evals.mcp_agent.dataset import EvalCase, build_dataset, load_cases
+from evals.mcp_agent.evaluators import ToolErrors, ToolRequirements
+from evals.mcp_agent.judge import JudgeAnswer
 
 DEFAULT_DATASET = Path(__file__).parent / "datasets" / "mcp_agent.json"
 

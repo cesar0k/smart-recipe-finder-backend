@@ -2,10 +2,10 @@
 
 Usage:
     Evaluate English dataset (default):
-        docker compose exec app python scripts/evaluate.py --lang en
+        docker compose exec app python -m evals.retrieval.evaluate --lang en
 
     Evaluate Russian dataset:
-        docker compose exec app python scripts/evaluate.py --lang ru
+        docker compose exec app python -m evals.retrieval.evaluate --lang ru
 """
 
 import argparse
@@ -46,7 +46,7 @@ matplotlib.use("Agg")
 
 TEST_COLLECTION_NAME = "recipes_test_collection"
 
-BASE_PATH = Path(__file__).resolve().parents[1]
+BASE_PATH = Path(__file__).resolve().parents[2]
 
 LIMIT_TOP_K = 5
 
@@ -69,9 +69,7 @@ async def setup_test_db() -> None:
     create_database(testing_settings.SYNC_TEST_DATABASE_ADMIN_URL)
 
     alembic_cfg = Config("alembic.ini")
-    alembic_cfg.set_main_option(
-        "sqlalchemy.url", testing_settings.ASYNC_TEST_DATABASE_ADMIN_URL
-    )
+    alembic_cfg.set_main_option("sqlalchemy.url", testing_settings.ASYNC_TEST_DATABASE_ADMIN_URL)
     await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
 
 
@@ -104,9 +102,7 @@ async def seed_eval_data(session: AsyncSession, recipes_path: Path) -> None:
 
         recipe_in = RecipeCreate(**r_input)
 
-        await recipe_service.create_recipe(
-            db=session, recipe_in=recipe_in, current_user=admin_user
-        )
+        await recipe_service.create_recipe(db=session, recipe_in=recipe_in, current_user=admin_user)
 
 
 async def evaluate_nls_method(
@@ -135,9 +131,7 @@ async def evaluate_nls_method(
         if expected_ids is None:
             expected_ids = [q["expected_id"]] if "expected_id" in q else []
 
-        expected_titles = {
-            id_to_title.get(eid) for eid in expected_ids if id_to_title.get(eid)
-        }
+        expected_titles = {id_to_title.get(eid) for eid in expected_ids if id_to_title.get(eid)}
         category = q.get("category", "unknown")
 
         if category not in category_stats:
@@ -175,14 +169,8 @@ async def evaluate_nls_method(
         total_retrieved = len(found_titles)
         total_relevant_in_db = len(expected_titles)
 
-        precision = (
-            (relevant_retrieved / total_retrieved) if total_retrieved > 0 else 0.0
-        )
-        recall = (
-            (relevant_retrieved / total_relevant_in_db)
-            if total_relevant_in_db > 0
-            else 0.0
-        )
+        precision = (relevant_retrieved / total_retrieved) if total_retrieved > 0 else 0.0
+        recall = (relevant_retrieved / total_relevant_in_db) if total_relevant_in_db > 0 else 0.0
 
         if (precision + recall) > 0:
             f1 = 2 * (precision * recall) / (precision + recall)
@@ -203,8 +191,7 @@ async def evaluate_nls_method(
         cat_acc = (stats["passed"] / stats["total"]) * 100
         cat_f1 = stats["total_f1"] / stats["total"]
         print(
-            f" - {cat:32}: {cat_acc:6.2f}% | F1: {cat_f1:.4f} "
-            f"({stats['passed']}/{stats['total']})"
+            f" - {cat:32}: {cat_acc:6.2f}% | F1: {cat_f1:.4f} ({stats['passed']}/{stats['total']})"
         )
     print(f"Overall Accuracy: {accuracy}% ({passed}/{total})")
     print(f"Average latency: {avg_latency:.5f} ms")
@@ -441,9 +428,7 @@ async def main() -> None:
 
     await setup_test_db()
 
-    eval_vector_store = VectorStore(
-        collection_name=TEST_COLLECTION_NAME, force_new=True
-    )
+    eval_vector_store = VectorStore(collection_name=TEST_COLLECTION_NAME, force_new=True)
     original_vector_store = recipe_service.vector_store
     recipe_service.vector_store = eval_vector_store
 
@@ -460,16 +445,17 @@ async def main() -> None:
     # 2. Disable LLM intent parsing (tests pure vector quality, not hybrid routing)
     from app.core import config as _app_config
     from app.services.recipe import tag_service as _tag_service
+
     _orig_search_abs = _app_config.settings.SEARCH_ABSOLUTE_MAX_DIST
     _orig_search_margin = _app_config.settings.SEARCH_RELATIVE_MARGIN
     _orig_parse_intent = _tag_service.parse_query_intent
     _app_config.settings.SEARCH_ABSOLUTE_MAX_DIST = testing_settings.SEARCH_ABSOLUTE_MAX_DIST
     _app_config.settings.SEARCH_RELATIVE_MARGIN = testing_settings.SEARCH_RELATIVE_MARGIN
 
-    async def _noop_intent(query: str):  # type: ignore[misc]
+    async def _noop_intent(query: str) -> None:
         return None  # disables both SQL-first and negation post-filter
 
-    _tag_service.parse_query_intent = _noop_intent  # type: ignore[assignment]
+    _tag_service.parse_query_intent = _noop_intent
 
     try:
         async with SessionLocal() as db:
@@ -518,7 +504,7 @@ async def main() -> None:
         # Restore production settings and functions
         _app_config.settings.SEARCH_ABSOLUTE_MAX_DIST = _orig_search_abs
         _app_config.settings.SEARCH_RELATIVE_MARGIN = _orig_search_margin
-        _tag_service.parse_query_intent = _orig_parse_intent  # type: ignore[assignment]
+        _tag_service.parse_query_intent = _orig_parse_intent
 
         try:
             eval_vector_store.client.delete_collection(TEST_COLLECTION_NAME)

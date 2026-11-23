@@ -10,8 +10,8 @@ from typing import Any
 
 from pydantic_evals.evaluators import EvaluationReason, Evaluator, EvaluatorContext
 
-from evals.agent import AgentRun, ToolCallRecord
-from evals.dataset import EvalCase, Requirement
+from evals.mcp_agent.agent import AgentRun, ToolCallRecord
+from evals.mcp_agent.dataset import EvalCase, Requirement
 
 # Only known client errors are recoverable: the agent can react to a missing
 # recipe or a rejected filter. Everything else (5xx, timeouts, unexpected MCP
