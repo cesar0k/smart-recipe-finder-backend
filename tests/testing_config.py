@@ -23,9 +23,10 @@ class TestingSettings(Settings):
             "mean_reciprocal_rank": 0.48,  # 0.497 actual; LLM tag-filter adds latency
             "zero_result_rate": 5.0,
             "avg_f1_score": 0.17,
-            "avg_latency": 2000,           # parse_query_intent adds ~0.5-1s per query
+            "avg_latency": 2000,  # parse_query_intent adds ~0.5-1s per query
         },
-        "Ingredient Filter": {"accuracy": 90.0, "avg_latency": 15},
+        # GitLab's shared runner is slower than GitHub's, so keep a small margin.
+        "Ingredient Filter": {"accuracy": 90.0, "avg_latency": 20},
     }
 
     @property

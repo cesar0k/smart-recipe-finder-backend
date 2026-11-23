@@ -1,0 +1,79 @@
+# GitLab mirror of .github/workflows/backend-quality-gate.yml.
+#
+# Runs on shared (non-privileged) runners: postgres and chroma come from GitLab
+# service containers and the job itself runs uv on python:3.12-slim. No Docker
+# socket and no Docker-in-Docker, so no privileged runner is required.
+#
+# Required CI/CD variables: HF_TOKEN, EMBEDDING_MODEL, CHROMA_COLLECTION_NAME.
+# The database is ephemeral, so its credentials are fixed below.
+
+stages:
+  - test
+
+validate-and-benchmark:
+  stage: test
+  image: python:3.12-slim-bookworm
+  timeout: 1h
+  interruptible: true
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+    - name: chromadb/chroma:1.3.7
+      alias: chroma
+  variables:
+    POSTGRES_USER: recipes
+    POSTGRES_PASSWORD: recipes
+    POSTGRES_DB: recipes_db
+    PYTHONUNBUFFERED: "1"
+    UV_CACHE_DIR: .uv-cache
+    UV_LINK_MODE: copy
+  cache:
+    key:
+      files:
+        - uv.lock
+    paths:
+      - .uv-cache
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends build-essential libmagic1 libheif1 git curl ca-certificates openssl
+    - pip install --no-cache-dir uv
+    - |
+      # Project-level CI/CD variables beat job variables, and uv --env-file does
+      # not replace variables that already exist in the environment. Export the
+      # credentials explicitly so the app always matches the postgres service.
+      export DB_HOST=postgres DB_INTERNAL_PORT=5432 DB_EXTERNAL_PORT=5432
+      export DB_USER="${POSTGRES_USER:-recipes}"
+      export DB_PASSWORD="${POSTGRES_PASSWORD:-recipes}"
+      export DB_NAME="${POSTGRES_DB:-recipes_db}"
+      export DB_ROOT_PASSWORD="${POSTGRES_PASSWORD:-recipes}"
+
+      cat > .env <<EOF
+      DB_HOST=$DB_HOST
+      DB_INTERNAL_PORT=$DB_INTERNAL_PORT
+      DB_EXTERNAL_PORT=$DB_EXTERNAL_PORT
+      DB_USER=$DB_USER
+      DB_PASSWORD=$DB_PASSWORD
+      DB_NAME=$DB_NAME
+      DB_ROOT_PASSWORD=$DB_ROOT_PASSWORD
+      POSTGRES_PASSWORD=$DB_PASSWORD
+
+      CHROMA_HOST=chroma
+      CHROMA_PORT=8000
+      CHROMA_COLLECTION_NAME=${CHROMA_COLLECTION_NAME:-recipes}
+
+      HF_TOKEN=${HF_TOKEN}
+      EMBEDDING_MODEL=${EMBEDDING_MODEL:-intfloat/multilingual-e5-large-instruct}
+
+      S3_ACCESS_KEY=${S3_ACCESS_KEY:-ci-access-key}
+      S3_SECRET_KEY=${S3_SECRET_KEY:-ci-secret-key}
+      GARAGE_RPC_SECRET=$(openssl rand -hex 32)
+
+      SECRET_KEY=$(openssl rand -hex 32)
+      EOF
+  script:
+    - uv sync --frozen --all-extras --dev
+    - uv run --env-file .env pytest -m crud -v
+    - uv run --env-file .env python -m evals.retrieval.evaluate
