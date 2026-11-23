@@ -64,7 +64,7 @@ jobs:
         run: uv run --env-file .env pytest -m crud -v
 
       - name: Run Search Quality Evaluation
-        run: uv run python scripts/evaluate.py
+        run: uv run python -m evals.retrieval.evaluate
 
       - name: Dump Docker Logs
         if: failure()

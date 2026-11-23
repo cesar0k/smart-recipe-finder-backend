@@ -182,19 +182,19 @@ spaces. Reconnect the server after changing prompts (`/mcps` or
 
 ### Agent evals
 
-`evals/` holds a minimal agent loop and a Pydantic Evals dataset of
+`evals/mcp_agent/` holds a minimal agent loop and a Pydantic Evals dataset of
 natural-language requests. Cases are graded on the tool trace
 (`ToolRequirements`, `ToolErrors`) and on the final answer by an LLM judge. The
 REST API must be running; the runner starts its own stdio MCP server.
 
 ```bash
-uv run python -m evals.run --limit 3   # smoke test
-uv run python -m evals.run             # full dataset
-uv run python -m evals.run --no-judge  # tool checks only
+uv run python -m evals.mcp_agent.run --limit 3   # smoke test
+uv run python -m evals.mcp_agent.run             # full dataset
+uv run python -m evals.mcp_agent.run --no-judge  # tool checks only
 ```
 
-Add cases in `evals/datasets/mcp_agent.json`, not in Python. Evals belong in a
-nightly job, not PR CI: they call a real LLM and the live API.
+Add cases in `evals/mcp_agent/datasets/mcp_agent.json`, not in Python. Evals
+belong in a nightly job, not PR CI: they call a real LLM and the live API.
 
 ### 1. Run over stdio (Claude Desktop, Cursor, etc.)
 
@@ -251,7 +251,7 @@ docker compose exec app pytest -m crud     # full CRUD + edge cases
 ```
 
 Search-quality evaluation lives outside the pytest suite — see
-`scripts/evaluate.py` below.
+`evals/retrieval/evaluate.py` below.
 
 Tests use an isolated `recipes_test_db` PostgreSQL database and `recipes_test_collection` ChromaDB collection, both torn down after the session.
 
@@ -260,7 +260,7 @@ Tests use an isolated `recipes_test_db` PostgreSQL database and `recipes_test_co
 ### Evaluate search quality
 
 ```bash
-docker compose exec app python scripts/evaluate.py --lang ru  # or --lang en
+docker compose exec app python -m evals.retrieval.evaluate --lang ru  # or --lang en
 ```
 
 Produces `evaluation_results.png` with Accuracy, MRR, ZRR, and latency metrics.
